@@ -79,8 +79,8 @@ void SpecificWorker::compute() {
     fps.print("Compute worker", 3000);
 
     try {
-        auto datos = lidar3d_proxy->getLidarData("lidar", 0.f, 2*M_PI, 1);
-        //qInfo() << datos.points.size();
+        auto datos = lidar3d_proxy->getLidarData("lidar", 0.f, 2*M_PI, 3);
+        qInfo() << datos.points.size();
         draw_lidar(datos.points, &viewer->scene);
     } catch (const std::exception &e) {
         qWarning() << e.what();

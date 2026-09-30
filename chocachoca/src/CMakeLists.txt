@@ -19,4 +19,3 @@ add_compile_options(
 )
 add_definitions(-DNDEBUG -fmax-errors=1)
 add_link_options(-flto=auto)
-
