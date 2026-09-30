@@ -1,0 +1,819 @@
+{
+	"artifacts" : 
+	[
+		{
+			"path" : "/home/usuario/robocomp/components/ROBOTICA-1/chocachoca/bin/chocachoca"
+		}
+	],
+	"backtrace" : 1,
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"ADD_EXECUTABLE",
+			"add_link_options",
+			"INCLUDE",
+			"TARGET_LINK_LIBRARIES",
+			"set_property",
+			"find_package",
+			"__find_dependency_common",
+			"find_dependency",
+			"_qt_internal_find_third_party_dependencies",
+			"include",
+			"set_target_properties",
+			"add_compile_options",
+			"ADD_DEFINITIONS",
+			"add_definitions",
+			"INCLUDE_DIRECTORIES",
+			"ROBOCOMP_INITIALIZE"
+		],
+		"files" : 
+		[
+			"generated/CMakeLists.txt",
+			"src/CMakeLists.txt",
+			"/snap/clion/505/bin/cmake/linux/x64/share/cmake-4.3/Modules/FindOpenGL.cmake",
+			"/usr/lib/x86_64-linux-gnu/cmake/Qt6/FindWrapOpenGL.cmake",
+			"/snap/clion/505/bin/cmake/linux/x64/share/cmake-4.3/Modules/CMakeFindDependencyMacro.cmake",
+			"/usr/lib/x86_64-linux-gnu/cmake/Qt6/QtPublicDependencyHelpers.cmake",
+			"/usr/lib/x86_64-linux-gnu/cmake/Qt6Gui/Qt6GuiDependencies.cmake",
+			"/usr/lib/x86_64-linux-gnu/cmake/Qt6Gui/Qt6GuiConfig.cmake",
+			"/usr/lib/x86_64-linux-gnu/cmake/Qt6/Qt6Config.cmake",
+			"/home/robocomp/robocomp/cmake/modules/qt.cmake",
+			"/home/robocomp/robocomp/cmake/robocomp.cmake"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 52,
+				"parent" : 0
+			},
+			{
+				"command" : 2,
+				"file" : 0,
+				"line" : 27,
+				"parent" : 0
+			},
+			{
+				"file" : 1,
+				"parent" : 2
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 21,
+				"parent" : 3
+			},
+			{
+				"command" : 3,
+				"file" : 0,
+				"line" : 53,
+				"parent" : 0
+			},
+			{
+				"command" : 2,
+				"file" : 0,
+				"line" : 26,
+				"parent" : 0
+			},
+			{
+				"file" : 9,
+				"parent" : 6
+			},
+			{
+				"command" : 5,
+				"file" : 9,
+				"line" : 107,
+				"parent" : 7
+			},
+			{
+				"file" : 8,
+				"parent" : 8
+			},
+			{
+				"command" : 5,
+				"file" : 8,
+				"line" : 167,
+				"parent" : 9
+			},
+			{
+				"file" : 7,
+				"parent" : 10
+			},
+			{
+				"command" : 9,
+				"file" : 7,
+				"line" : 50,
+				"parent" : 11
+			},
+			{
+				"file" : 6,
+				"parent" : 12
+			},
+			{
+				"command" : 8,
+				"file" : 6,
+				"line" : 30,
+				"parent" : 13
+			},
+			{
+				"command" : 7,
+				"file" : 5,
+				"line" : 33,
+				"parent" : 14
+			},
+			{
+				"command" : 6,
+				"file" : 4,
+				"line" : 125,
+				"parent" : 15
+			},
+			{
+				"command" : 5,
+				"file" : 4,
+				"line" : 93,
+				"parent" : 16
+			},
+			{
+				"file" : 3,
+				"parent" : 17
+			},
+			{
+				"command" : 5,
+				"file" : 3,
+				"line" : 10,
+				"parent" : 18
+			},
+			{
+				"file" : 2,
+				"parent" : 19
+			},
+			{
+				"command" : 4,
+				"file" : 2,
+				"line" : 837,
+				"parent" : 20
+			},
+			{
+				"command" : 10,
+				"file" : 2,
+				"line" : 835,
+				"parent" : 20
+			},
+			{
+				"command" : 11,
+				"file" : 1,
+				"line" : 14,
+				"parent" : 3
+			},
+			{
+				"command" : 12,
+				"file" : 0,
+				"line" : 29,
+				"parent" : 0
+			},
+			{
+				"command" : 13,
+				"file" : 1,
+				"line" : 20,
+				"parent" : 3
+			},
+			{
+				"command" : 2,
+				"file" : 0,
+				"line" : 25,
+				"parent" : 0
+			},
+			{
+				"file" : 10,
+				"parent" : 26
+			},
+			{
+				"command" : 14,
+				"file" : 10,
+				"line" : 235,
+				"parent" : 27
+			},
+			{
+				"command" : 15,
+				"file" : 0,
+				"line" : 45,
+				"parent" : 0
+			},
+			{
+				"command" : 14,
+				"file" : 10,
+				"line" : 12,
+				"parent" : 29
+			}
+		]
+	},
+	"codemodelVersion" : 
+	{
+		"major" : 2,
+		"minor" : 10
+	},
+	"compileDependencies" : 
+	[
+		{
+			"backtrace" : 5,
+			"id" : "Qt6::Gui::@21bfa6e54ac71a0c1a55"
+		},
+		{
+			"backtrace" : 5,
+			"id" : "Qt6::Core::@21bfa6e54ac71a0c1a55"
+		},
+		{
+			"backtrace" : 5,
+			"id" : "Qt6::Widgets::@21bfa6e54ac71a0c1a55"
+		},
+		{
+			"backtrace" : 5,
+			"id" : "Qt6::OpenGL::@21bfa6e54ac71a0c1a55"
+		},
+		{
+			"backtrace" : 5,
+			"id" : "Qt6::Xml::@21bfa6e54ac71a0c1a55"
+		},
+		{
+			"backtrace" : 5,
+			"id" : "Qt6::Core::@21bfa6e54ac71a0c1a55"
+		},
+		{
+			"backtrace" : 5,
+			"id" : "Qt6::Widgets::@21bfa6e54ac71a0c1a55"
+		},
+		{
+			"backtrace" : 5,
+			"id" : "Qt6::StateMachine::@21bfa6e54ac71a0c1a55"
+		}
+	],
+	"compileGroups" : 
+	[
+		{
+			"compileCommandFragments" : 
+			[
+				{
+					"fragment" : "-std=gnu++23 -fdiagnostics-color=always   -I/usr/include/x86_64-linux-gnu/qt6/QtOpenGLWidgets/ -DBOOST_TT_HAS_OPERATOR_HPP_INCLUDED -Wall -DQT_DLL -DQT_GUI_LIB -DQT_CORE_LIB -fmax-errors=1"
+				},
+				{
+					"backtrace" : 23,
+					"fragment" : "-O3"
+				},
+				{
+					"backtrace" : 23,
+					"fragment" : "-march=native"
+				},
+				{
+					"backtrace" : 23,
+					"fragment" : "-flto=auto"
+				},
+				{
+					"backtrace" : 23,
+					"fragment" : "-fno-plt"
+				},
+				{
+					"backtrace" : 5,
+					"fragment" : "-fPIC"
+				}
+			],
+			"defines" : 
+			[
+				{
+					"backtrace" : 24,
+					"define" : "ICE_CPP11_MAPPING"
+				},
+				{
+					"backtrace" : 25,
+					"define" : "NDEBUG"
+				},
+				{
+					"backtrace" : 5,
+					"define" : "QT_CORE_LIB"
+				},
+				{
+					"backtrace" : 5,
+					"define" : "QT_GUI_LIB"
+				},
+				{
+					"backtrace" : 5,
+					"define" : "QT_NO_DEBUG"
+				},
+				{
+					"backtrace" : 5,
+					"define" : "QT_OPENGL_LIB"
+				},
+				{
+					"backtrace" : 5,
+					"define" : "QT_STATEMACHINE_LIB"
+				},
+				{
+					"backtrace" : 5,
+					"define" : "QT_WIDGETS_LIB"
+				},
+				{
+					"backtrace" : 5,
+					"define" : "QT_XML_LIB"
+				}
+			],
+			"includes" : 
+			[
+				{
+					"backtrace" : 0,
+					"path" : "/home/robocomp/robocomp/components/ROBOTICA-1/chocachoca/generated/chocachoca_autogen/include"
+				},
+				{
+					"backtrace" : 28,
+					"path" : "/home/robocomp/robocomp/components/ROBOTICA-1/chocachoca/generated"
+				},
+				{
+					"backtrace" : 28,
+					"path" : "/home/usuario/robocomp/components/ROBOTICA-1/chocachoca/generated/."
+				},
+				{
+					"backtrace" : 28,
+					"path" : "/opt/robocomp/include"
+				},
+				{
+					"backtrace" : 28,
+					"path" : "/classes"
+				},
+				{
+					"backtrace" : 28,
+					"path" : "/home/robocomp/robocomp/components/ROBOTICA-1/chocachoca"
+				},
+				{
+					"backtrace" : 30,
+					"path" : "/home/robocomp/robocomp/classes"
+				},
+				{
+					"backtrace" : 30,
+					"path" : "/home/robocomp/robocomp/libs"
+				},
+				{
+					"backtrace" : 30,
+					"path" : "/home/robocomp/robocomp/interfaces"
+				},
+				{
+					"backtrace" : 30,
+					"path" : "/include"
+				},
+				{
+					"backtrace" : 5,
+					"isSystem" : true,
+					"path" : "/usr/include/x86_64-linux-gnu/qt6/QtGui"
+				},
+				{
+					"backtrace" : 5,
+					"isSystem" : true,
+					"path" : "/usr/include/x86_64-linux-gnu/qt6"
+				},
+				{
+					"backtrace" : 5,
+					"isSystem" : true,
+					"path" : "/usr/include/x86_64-linux-gnu/qt6/QtCore"
+				},
+				{
+					"backtrace" : 5,
+					"isSystem" : true,
+					"path" : "/usr/lib/x86_64-linux-gnu/qt6/mkspecs/linux-g++"
+				},
+				{
+					"backtrace" : 5,
+					"isSystem" : true,
+					"path" : "/usr/include/x86_64-linux-gnu/qt6/QtWidgets"
+				},
+				{
+					"backtrace" : 5,
+					"isSystem" : true,
+					"path" : "/usr/include/x86_64-linux-gnu/qt6/QtOpenGL"
+				},
+				{
+					"backtrace" : 5,
+					"isSystem" : true,
+					"path" : "/usr/include/x86_64-linux-gnu/qt6/QtXml"
+				},
+				{
+					"backtrace" : 5,
+					"isSystem" : true,
+					"path" : "/usr/include/x86_64-linux-gnu/qt6/QtStateMachine"
+				}
+			],
+			"language" : "CXX",
+			"languageStandard" : 
+			{
+				"backtraces" : 
+				[
+					5,
+					5
+				],
+				"standard" : "23"
+			},
+			"sourceIndexes" : 
+			[
+				0,
+				1,
+				2,
+				3,
+				4,
+				5,
+				6,
+				7,
+				8,
+				9,
+				10,
+				11,
+				12,
+				13,
+				14
+			]
+		}
+	],
+	"dependencies" : 
+	[
+		{
+			"id" : "ICES__home_usuario_robocomp_components_ROBOTICA-1_chocachoca_generated::@21bfa6e54ac71a0c1a55"
+		},
+		{
+			"id" : "chocachoca_autogen_timestamp_deps::@21bfa6e54ac71a0c1a55"
+		},
+		{
+			"backtrace" : 0,
+			"id" : "chocachoca_autogen::@21bfa6e54ac71a0c1a55"
+		}
+	],
+	"id" : "chocachoca::@21bfa6e54ac71a0c1a55",
+	"link" : 
+	{
+		"commandFragments" : 
+		[
+			{
+				"backtrace" : 4,
+				"fragment" : "-flto=auto",
+				"role" : "flags"
+			},
+			{
+				"backtrace" : 5,
+				"fragment" : "-L/opt/robocomp/lib",
+				"role" : "libraries"
+			},
+			{
+				"backtrace" : 5,
+				"fragment" : "-L/home/robocomp/robocomp///classes",
+				"role" : "libraries"
+			},
+			{
+				"backtrace" : 5,
+				"fragment" : "/usr/lib/x86_64-linux-gnu/libQt6OpenGL.so.6.4.2",
+				"role" : "libraries"
+			},
+			{
+				"backtrace" : 5,
+				"fragment" : "/usr/lib/x86_64-linux-gnu/libQt6Xml.so.6.4.2",
+				"role" : "libraries"
+			},
+			{
+				"backtrace" : 5,
+				"fragment" : "/usr/lib/x86_64-linux-gnu/libQt6Widgets.so.6.4.2",
+				"role" : "libraries"
+			},
+			{
+				"backtrace" : 5,
+				"fragment" : "/usr/lib/x86_64-linux-gnu/libQt6StateMachine.so.6.4.2",
+				"role" : "libraries"
+			},
+			{
+				"backtrace" : 5,
+				"fragment" : "-lQt6OpenGLWidgets",
+				"role" : "libraries"
+			},
+			{
+				"backtrace" : 5,
+				"fragment" : "/usr/lib/x86_64-linux-gnu/libIce++11.so",
+				"role" : "libraries"
+			},
+			{
+				"backtrace" : 5,
+				"fragment" : "/usr/lib/x86_64-linux-gnu/libIceStorm++11.so",
+				"role" : "libraries"
+			},
+			{
+				"backtrace" : 5,
+				"fragment" : "/usr/lib/x86_64-linux-gnu/libIce.so",
+				"role" : "libraries"
+			},
+			{
+				"backtrace" : 5,
+				"fragment" : "/usr/lib/x86_64-linux-gnu/libIceStorm.so",
+				"role" : "libraries"
+			},
+			{
+				"backtrace" : 5,
+				"fragment" : "/usr/lib/x86_64-linux-gnu/libQt6Gui.so.6.4.2",
+				"role" : "libraries"
+			},
+			{
+				"backtrace" : 5,
+				"fragment" : "/usr/lib/x86_64-linux-gnu/libQt6Core.so.6.4.2",
+				"role" : "libraries"
+			},
+			{
+				"backtrace" : 21,
+				"fragment" : "/usr/lib/x86_64-linux-gnu/libGLX.so",
+				"role" : "libraries"
+			},
+			{
+				"backtrace" : 22,
+				"fragment" : "/usr/lib/x86_64-linux-gnu/libOpenGL.so",
+				"role" : "libraries"
+			}
+		],
+		"language" : "CXX"
+	},
+	"linkLibraries" : 
+	[
+		{
+			"backtrace" : 5,
+			"fragment" : "-L/opt/robocomp/lib"
+		},
+		{
+			"backtrace" : 5,
+			"fragment" : "-L/home/robocomp/robocomp///classes"
+		},
+		{
+			"backtrace" : 5,
+			"id" : "Qt6::Gui::@21bfa6e54ac71a0c1a55"
+		},
+		{
+			"backtrace" : 5,
+			"id" : "Qt6::Core::@21bfa6e54ac71a0c1a55"
+		},
+		{
+			"backtrace" : 5,
+			"id" : "Qt6::Widgets::@21bfa6e54ac71a0c1a55"
+		},
+		{
+			"backtrace" : 5,
+			"id" : "Qt6::OpenGL::@21bfa6e54ac71a0c1a55"
+		},
+		{
+			"backtrace" : 5,
+			"id" : "Qt6::Xml::@21bfa6e54ac71a0c1a55"
+		},
+		{
+			"backtrace" : 5,
+			"id" : "Qt6::Core::@21bfa6e54ac71a0c1a55"
+		},
+		{
+			"backtrace" : 5,
+			"id" : "Qt6::Widgets::@21bfa6e54ac71a0c1a55"
+		},
+		{
+			"backtrace" : 5,
+			"id" : "Qt6::StateMachine::@21bfa6e54ac71a0c1a55"
+		},
+		{
+			"backtrace" : 5,
+			"fragment" : "Qt6OpenGLWidgets"
+		},
+		{
+			"backtrace" : 5,
+			"fragment" : "/usr/lib/x86_64-linux-gnu/libIce++11.so"
+		},
+		{
+			"backtrace" : 5,
+			"fragment" : "/usr/lib/x86_64-linux-gnu/libIceStorm++11.so"
+		},
+		{
+			"backtrace" : 5,
+			"fragment" : "/usr/lib/x86_64-linux-gnu/libIce.so"
+		},
+		{
+			"backtrace" : 5,
+			"fragment" : "/usr/lib/x86_64-linux-gnu/libIceStorm.so"
+		}
+	],
+	"name" : "chocachoca",
+	"nameOnDisk" : "chocachoca",
+	"orderDependencies" : 
+	[
+		{
+			"id" : "Qt6::moc::@21bfa6e54ac71a0c1a55"
+		},
+		{
+			"id" : "Qt6::uic::@21bfa6e54ac71a0c1a55"
+		},
+		{
+			"id" : "ICES__home_usuario_robocomp_components_ROBOTICA-1_chocachoca_generated::@21bfa6e54ac71a0c1a55"
+		},
+		{
+			"id" : "chocachoca_autogen_timestamp_deps::@21bfa6e54ac71a0c1a55"
+		},
+		{
+			"backtrace" : 0,
+			"id" : "chocachoca_autogen::@21bfa6e54ac71a0c1a55"
+		}
+	],
+	"paths" : 
+	{
+		"build" : "generated",
+		"source" : "generated"
+	},
+	"sourceGroups" : 
+	[
+		{
+			"name" : "Source Files",
+			"sourceIndexes" : 
+			[
+				0,
+				1,
+				2,
+				3,
+				4,
+				5,
+				6,
+				7,
+				8,
+				9,
+				10,
+				11,
+				12,
+				13,
+				14
+			]
+		},
+		{
+			"name" : "",
+			"sourceIndexes" : 
+			[
+				15
+			]
+		},
+		{
+			"name" : "CMake Rules",
+			"sourceIndexes" : 
+			[
+				16,
+				17,
+				18,
+				19,
+				20,
+				21,
+				22
+			]
+		}
+	],
+	"sources" : 
+	[
+		{
+			"backtrace" : 0,
+			"compileGroupIndex" : 0,
+			"isGenerated" : true,
+			"path" : "/home/robocomp/robocomp/components/ROBOTICA-1/chocachoca/generated/chocachoca_autogen/mocs_compilation.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "/home/robocomp/robocomp/classes/abstract_graphic_viewer/abstract_graphic_viewer.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "src/specificworker.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "/home/robocomp/robocomp/classes/rapplication/rapplication.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "/home/robocomp/robocomp/classes/sigwatch/sigwatch.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "/home/robocomp/robocomp/classes/grafcetStep/GRAFCETStep.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "/home/robocomp/robocomp/classes/ConfigLoader/ConfigLoader.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "generated/main.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "generated/genericworker.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"isGenerated" : true,
+			"path" : "/home/robocomp/robocomp/components/ROBOTICA-1/chocachoca/generated/Person.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"isGenerated" : true,
+			"path" : "/home/robocomp/robocomp/components/ROBOTICA-1/chocachoca/generated/Camera360RGB.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"isGenerated" : true,
+			"path" : "/home/robocomp/robocomp/components/ROBOTICA-1/chocachoca/generated/VisualElements.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"isGenerated" : true,
+			"path" : "/home/robocomp/robocomp/components/ROBOTICA-1/chocachoca/generated/Lidar3D.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"isGenerated" : true,
+			"path" : "/home/robocomp/robocomp/components/ROBOTICA-1/chocachoca/generated/OmniRobot.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"isGenerated" : true,
+			"path" : "/home/robocomp/robocomp/components/ROBOTICA-1/chocachoca/generated/GenericBase.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 0,
+			"isGenerated" : true,
+			"path" : "/home/robocomp/robocomp/components/ROBOTICA-1/chocachoca/generated/chocachoca_autogen/timestamp",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 0,
+			"isGenerated" : true,
+			"path" : "/home/robocomp/robocomp/components/ROBOTICA-1/chocachoca/generated/Person.cpp.rule",
+			"sourceGroupIndex" : 2
+		},
+		{
+			"backtrace" : 0,
+			"isGenerated" : true,
+			"path" : "/home/robocomp/robocomp/components/ROBOTICA-1/chocachoca/generated/Camera360RGB.cpp.rule",
+			"sourceGroupIndex" : 2
+		},
+		{
+			"backtrace" : 0,
+			"isGenerated" : true,
+			"path" : "/home/robocomp/robocomp/components/ROBOTICA-1/chocachoca/generated/VisualElements.cpp.rule",
+			"sourceGroupIndex" : 2
+		},
+		{
+			"backtrace" : 0,
+			"isGenerated" : true,
+			"path" : "/home/robocomp/robocomp/components/ROBOTICA-1/chocachoca/generated/Lidar3D.cpp.rule",
+			"sourceGroupIndex" : 2
+		},
+		{
+			"backtrace" : 0,
+			"isGenerated" : true,
+			"path" : "/home/robocomp/robocomp/components/ROBOTICA-1/chocachoca/generated/OmniRobot.cpp.rule",
+			"sourceGroupIndex" : 2
+		},
+		{
+			"backtrace" : 0,
+			"isGenerated" : true,
+			"path" : "/home/robocomp/robocomp/components/ROBOTICA-1/chocachoca/generated/GenericBase.cpp.rule",
+			"sourceGroupIndex" : 2
+		},
+		{
+			"backtrace" : 0,
+			"isGenerated" : true,
+			"path" : "/home/robocomp/robocomp/components/ROBOTICA-1/chocachoca/generated/chocachoca_autogen/timestamp.rule",
+			"sourceGroupIndex" : 2
+		}
+	],
+	"type" : "EXECUTABLE"
+}

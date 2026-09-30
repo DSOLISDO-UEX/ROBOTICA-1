@@ -18,88 +18,99 @@
  */
 #include "specificworker.h"
 
-SpecificWorker::SpecificWorker(const ConfigLoader& configLoader, TuplePrx tprx, bool startup_check) : GenericWorker(configLoader, tprx)
-{
-	this->startup_check_flag = startup_check;
-	if(this->startup_check_flag)
-	{
-		this->startup_check();
-	}
-	else
-	{
-		#ifdef HIBERNATION_ENABLED
-			hibernationChecker.start(500);
-		#endif
-		
-		// Example statemachine:
-		/***
-		//Your definition for the statesmachine (if you dont want use a execute function, use nullptr)
-		states["CustomState"] = std::make_unique<GRAFCETStep>("CustomState", period, 
-															std::bind(&SpecificWorker::customLoop, this),  // Cyclic function
-															std::bind(&SpecificWorker::customEnter, this), // On-enter function
-															std::bind(&SpecificWorker::customExit, this)); // On-exit function
+SpecificWorker::SpecificWorker(const ConfigLoader &configLoader, TuplePrx tprx, bool startup_check) : GenericWorker(
+    configLoader, tprx) {
+    this->startup_check_flag = startup_check;
+    if (this->startup_check_flag) {
+        this->startup_check();
+    } else {
+#ifdef HIBERNATION_ENABLED
+        hibernationChecker.start(500);
+#endif
 
-		//Add your definition of transitions (addTransition(originOfSignal, signal, dstState))
-		states["CustomState"]->addTransition(states["CustomState"].get(), SIGNAL(entered()), states["OtherState"].get());
-		states["Compute"]->addTransition(this, SIGNAL(customSignal()), states["CustomState"].get()); //Define your signal in the .h file under the "Signals" section.
+        // Example statemachine:
+        /***
+        //Your definition for the statesmachine (if you dont want use a execute function, use nullptr)
+        states["CustomState"] = std::make_unique<GRAFCETStep>("CustomState", period,
+                                                            std::bind(&SpecificWorker::customLoop, this),  // Cyclic function
+                                                            std::bind(&SpecificWorker::customEnter, this), // On-enter function
+                                                            std::bind(&SpecificWorker::customExit, this)); // On-exit function
 
-		//Add your custom state
-		statemachine.addState(states["CustomState"].get());
-		***/
+        //Add your definition of transitions (addTransition(originOfSignal, signal, dstState))
+        states["CustomState"]->addTransition(states["CustomState"].get(), SIGNAL(entered()), states["OtherState"].get());
+        states["Compute"]->addTransition(this, SIGNAL(customSignal()), states["CustomState"].get()); //Define your signal in the .h file under the "Signals" section.
 
-		statemachine.setChildMode(QState::ExclusiveStates);
-		statemachine.start();
+        //Add your custom state
+        statemachine.addState(states["CustomState"].get());
+        ***/
 
-		auto error = statemachine.errorString();
-		if (error.length() > 0){
-			qWarning() << error;
-			throw error;
-		}
-	}
+        statemachine.setChildMode(QState::ExclusiveStates);
+        statemachine.start();
+
+        auto error = statemachine.errorString();
+        if (error.length() > 0) {
+            qWarning() << error;
+            throw error;
+        }
+    }
 }
 
-SpecificWorker::~SpecificWorker()
-{
-	std::cout << "Destroying SpecificWorker" << std::endl;
+SpecificWorker::~SpecificWorker() {
+    std::cout << "Destroying SpecificWorker" << std::endl;
 }
 
 
-void SpecificWorker::initialize()
-{
+void SpecificWorker::initialize() {
     std::cout << "initialize worker" << std::endl;
-	GenericWorker::initialize();
+    GenericWorker::initialize();
 
+    this->dimensions = QRectF(-6000, -3000, 12000, 6000);
+    viewer = new AbstractGraphicViewer(this->frame, this->dimensions);
+    this->resize(900, 450);
+    viewer->show();
+    const auto rob = viewer->add_robot(ROBOT_LENGTH, ROBOT_LENGTH, 0, 190, QColor("Blue"));
+    robot_polygon = std::get<0>(rob);
 
-
-    //initializeCODE
-    /////////GET PARAMS, OPEND DEVICES....////////
-    //int period = configLoader.get<int>("Period.Compute") //NOTE: If you want get period of compute use getPeriod("compute")
-    //std::string device = configLoader.get<std::string>("Device.name") 
+    connect(viewer, &AbstractGraphicViewer::new_mouse_coordinates, this, &SpecificWorker::new_target_slot);
 }
 
 
-void SpecificWorker::compute()
-{
+void SpecificWorker::compute() {
     fps.print("Compute worker", 3000);
 
-	//computeCODE
-	//try
-	//{
-	//  camera_proxy->getYImage(0,img, cState, bState);
-    //    if (img.empty())
-    //        emit goToEmergency()
-	//  memcpy(image_gray.data, &img[0], m_width*m_height*sizeof(uchar));
-	//  searchTags(image_gray);
-	//}
-	//catch(const Ice::Exception &e)
-	//{
-	//  std::cout << "Error reading from Camera" << e << std::endl;
-	//}
+    try {
+        auto datos = lidar3d_proxy->getLidarData("lidar", 0.f, 2*M_PI, 1);
+        //qInfo() << datos.points.size();
+        draw_lidar(datos.points, &viewer->scene);
+    } catch (const std::exception &e) {
+        qWarning() << e.what();
+    }
+}
+
+void SpecificWorker::new_target_slot(QPointF p) {
+    qInfo() << p;
+}
+
+void SpecificWorker::draw_lidar(const auto &points, QGraphicsScene *scene) {
+    static std::vector<QGraphicsItem *> draw_points;
+    for (const auto &p: draw_points) {
+        scene->removeItem(p);
+        delete p;
+    }
+    draw_points.clear();
+
+    const QColor color("LightGreen");
+    const QPen pen(color, 10);
+    //const QBrush brush(color, Qt::SolidPattern);
+    for (const auto &p: points) {
+        const auto dp = scene->addRect(-25, -25, 50, 50, pen);
+        dp->setPos(p.x, p.y);
+        draw_points.push_back(dp); // add to the list of points to be deleted next time
+    }
 }
 
 
-void SpecificWorker::emergency()
-{
+void SpecificWorker::emergency() {
     fps.print("Emergency worker", 3000);
     //emergencyCODE
     //
@@ -109,22 +120,18 @@ void SpecificWorker::emergency()
 
 
 //Execute one when exiting to emergencyState
-void SpecificWorker::restore()
-{
+void SpecificWorker::restore() {
     std::cout << "Restore worker" << std::endl;
     //restoreCODE
     //Restore emergency component
-
 }
 
 
-int SpecificWorker::startup_check()
-{
-	std::cout << "Startup check" << std::endl;
-	QTimer::singleShot(200, QCoreApplication::instance(), SLOT(quit()));
-	return 0;
+int SpecificWorker::startup_check() {
+    std::cout << "Startup check" << std::endl;
+    QTimer::singleShot(200, QCoreApplication::instance(), SLOT(quit()));
+    return 0;
 }
-
 
 
 /**************************************/
@@ -178,4 +185,3 @@ int SpecificWorker::startup_check()
 // RoboCompVisualElements::TRoi
 // RoboCompVisualElements::TObject
 // RoboCompVisualElements::TObjects
-
