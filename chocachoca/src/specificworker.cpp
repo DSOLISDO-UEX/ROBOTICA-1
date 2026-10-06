@@ -18,12 +18,16 @@
  */
 #include "specificworker.h"
 
-SpecificWorker::SpecificWorker(const ConfigLoader &configLoader, TuplePrx tprx, bool startup_check) : GenericWorker(
-    configLoader, tprx) {
+SpecificWorker::SpecificWorker(const ConfigLoader& configLoader, TuplePrx tprx, bool startup_check) : GenericWorker(
+    configLoader, tprx)
+{
     this->startup_check_flag = startup_check;
-    if (this->startup_check_flag) {
+    if (this->startup_check_flag)
+    {
         this->startup_check();
-    } else {
+    }
+    else
+    {
 #ifdef HIBERNATION_ENABLED
         hibernationChecker.start(500);
 #endif
@@ -48,19 +52,22 @@ SpecificWorker::SpecificWorker(const ConfigLoader &configLoader, TuplePrx tprx, 
         statemachine.start();
 
         auto error = statemachine.errorString();
-        if (error.length() > 0) {
+        if (error.length() > 0)
+        {
             qWarning() << error;
             throw error;
         }
     }
 }
 
-SpecificWorker::~SpecificWorker() {
+SpecificWorker::~SpecificWorker()
+{
     std::cout << "Destroying SpecificWorker" << std::endl;
 }
 
 
-void SpecificWorker::initialize() {
+void SpecificWorker::initialize()
+{
     std::cout << "initialize worker" << std::endl;
     GenericWorker::initialize();
 
@@ -75,25 +82,98 @@ void SpecificWorker::initialize() {
 }
 
 
-void SpecificWorker::compute() {
+void SpecificWorker::compute()
+{
     fps.print("Compute worker", 3000);
 
-    try {
-        auto datos = lidar3d_proxy->getLidarData("lidar", 0.f, 2*M_PI, 3);
-        qInfo() << datos.points.size();
-        draw_lidar(datos.points, &viewer->scene);
-    } catch (const std::exception &e) {
-        qWarning() << e.what();
+    RoboCompLidar3D::TData data;
+    try
+    {
+        data = lidar3d_proxy->getLidarData("lidar", 0, 2 * M_PI, 2);
+        if (data.points.empty())
+        {
+            qFatal("No Lidar data");
+            return;
+        }
+
+        draw_lidar(data.points, &viewer->scene);
     }
+    catch (std::exception& e)
+    {
+    };
+
+    // logic to avoid hitting the wall.
+    // Takes lidar data and returns new values for adv and rot
+    auto [adv, rot] = navigation(data.points);
+
+    try { omnirobot_proxy->setSpeedBase(0.f, adv, rot); }
+    catch (std::exception& e)
+    {
+    };
 }
 
-void SpecificWorker::new_target_slot(QPointF p) {
+void SpecificWorker::new_target_slot(QPointF p)
+{
     qInfo() << p;
 }
 
-void SpecificWorker::draw_lidar(const auto &points, QGraphicsScene *scene) {
-    static std::vector<QGraphicsItem *> draw_points;
-    for (const auto &p: draw_points) {
+std::tuple<float, float> SpecificWorker::navigation(const RoboCompLidar3D::TPoints& points)
+{
+    float minDistance = 300.f, rot = 0.f;
+    static RobotState state = RobotState::Advance;
+
+    auto visiblePoints = points | std::views::filter([&](const auto& point)
+    {
+        return (point.phi > -(M_PI / 4)) && (point.phi < (M_PI / 4));
+    }) | std::views::filter([&](const auto& point)
+    {
+        return point.distance2d < minDistance && point.distance2d > 100;
+    });
+
+    auto minIt = std::min(visiblePoints.begin(), visiblePoints.end(), [](const auto& itA, const auto& itB)
+    {
+        auto a = *itA;
+        auto b = *itB;
+        return a.distance2d < b.distance2d;
+    });
+
+    if (minIt != visiblePoints.end())
+    {
+        auto min = *minIt;
+        if (min.r < 0.f)
+        {
+            rot = 1.f;
+        }
+        else
+        {
+            rot = -1.f;
+        }
+
+        state = RobotState::Rotate;
+    }
+
+    switch (state)
+    {
+    case RobotState::Rotate:
+        {
+            std::cout << "Rotate worker" << std::endl;
+            return std::make_tuple(0, rot);
+        }
+    case RobotState::Advance:
+        {
+            std::cout << "Advance worker" << std::endl;
+            return std::make_tuple(500, 0);
+        }
+    }
+
+    return std::make_tuple(0, 0);
+}
+
+void SpecificWorker::draw_lidar(const auto& points, QGraphicsScene* scene)
+{
+    static std::vector<QGraphicsItem*> draw_points;
+    for (const auto& p : draw_points)
+    {
         scene->removeItem(p);
         delete p;
     }
@@ -102,7 +182,17 @@ void SpecificWorker::draw_lidar(const auto &points, QGraphicsScene *scene) {
     const QColor color("LightGreen");
     const QPen pen(color, 10);
     //const QBrush brush(color, Qt::SolidPattern);
-    for (const auto &p: points) {
+
+    auto visiblePoints = points | std::views::filter([&](const auto& point)
+    {
+        return (point.phi > (-M_PI / 4)) && (point.phi < (M_PI / 4));
+    }) | std::views::filter([&](const auto& point)
+    {
+        return point.distance2d > 100;
+    });
+
+    for (const auto& p : visiblePoints)
+    {
         const auto dp = scene->addRect(-25, -25, 50, 50, pen);
         dp->setPos(p.x, p.y);
         draw_points.push_back(dp); // add to the list of points to be deleted next time
@@ -110,7 +200,8 @@ void SpecificWorker::draw_lidar(const auto &points, QGraphicsScene *scene) {
 }
 
 
-void SpecificWorker::emergency() {
+void SpecificWorker::emergency()
+{
     fps.print("Emergency worker", 3000);
     //emergencyCODE
     //
@@ -120,14 +211,16 @@ void SpecificWorker::emergency() {
 
 
 //Execute one when exiting to emergencyState
-void SpecificWorker::restore() {
+void SpecificWorker::restore()
+{
     std::cout << "Restore worker" << std::endl;
     //restoreCODE
     //Restore emergency component
 }
 
 
-int SpecificWorker::startup_check() {
+int SpecificWorker::startup_check()
+{
     std::cout << "Startup check" << std::endl;
     QTimer::singleShot(200, QCoreApplication::instance(), SLOT(quit()));
     return 0;

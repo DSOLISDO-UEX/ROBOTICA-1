@@ -30,13 +30,21 @@
 
 #include <genericworker.h>
 #include <abstract_graphic_viewer/abstract_graphic_viewer.h>
+#include <format>
+
+enum class RobotState : uint8_t
+{
+    Advance = 0,
+    Rotate
+};
 
 /**
  * \brief Class SpecificWorker implements the core functionality of the component.
  */
 class SpecificWorker : public GenericWorker
 {
-Q_OBJECT
+    Q_OBJECT
+
 public:
     /**
      * \brief Constructor for SpecificWorker.
@@ -44,58 +52,64 @@ public:
      * \param tprx Tuple of proxies required for the component.
      * \param startup_check Indicates whether to perform startup checks.
      */
-	SpecificWorker(const ConfigLoader& configLoader, TuplePrx tprx, bool startup_check);
+    SpecificWorker(const ConfigLoader& configLoader, TuplePrx tprx, bool startup_check);
 
-	/**
+    /**
      * \brief Destructor for SpecificWorker.
      */
-	~SpecificWorker();
+    ~SpecificWorker();
 
-	void draw_lidar(const auto &points, QGraphicsScene* scene);
+    void draw_lidar(const auto& points, QGraphicsScene* scene);
+
 public slots:
+    /**
+     * \brief Initializes the worker one time.
+     */
+    void initialize();
 
-	/**
-	 * \brief Initializes the worker one time.
-	 */
-	void initialize();
+    /**
+     * \brief Main compute loop of the worker.
+     */
+    void compute();
 
-	/**
-	 * \brief Main compute loop of the worker.
-	 */
-	void compute();
+    /**
+     * \brief Handles the emergency state loop.
+     */
+    void emergency();
 
-	/**
-	 * \brief Handles the emergency state loop.
-	 */
-	void emergency();
-
-	/**
-	 * \brief Restores the component from an emergency state.
-	 */
-	void restore();
+    /**
+     * \brief Restores the component from an emergency state.
+     */
+    void restore();
 
     /**
      * \brief Performs startup checks for the component.
      * \return An integer representing the result of the checks.
      */
-	int startup_check();
+    int startup_check();
 
-	void new_target_slot(QPointF);
+    void new_target_slot(QPointF);
+
+    /**
+     *
+     * \brief Checks the given point cloud to see if the robot would collide in any of its directions.
+     * @return A tuple with 2 floats with the new speed (x, z) and the rotation needed.
+     */
+    std::tuple<float, float> navigation(const RoboCompLidar3D::TPoints& points);
 
 private:
-
-	/**
+    /**
      * \brief Flag indicating whether startup checks are enabled.
      */
-	bool startup_check_flag;
-	QRectF dimensions;
-	AbstractGraphicViewer *viewer;
-	const int ROBOT_LENGTH = 400;
-	QGraphicsItem *robot_polygon;
+    bool startup_check_flag;
+    QRectF dimensions;
+    AbstractGraphicViewer* viewer;
+    const int ROBOT_LENGTH = 400;
+    QGraphicsItem* robot_polygon;
 
 
 signals:
-	//void customSignal();
+    //void customSignal();
 };
 
 #endif
