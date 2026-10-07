@@ -98,18 +98,14 @@ void SpecificWorker::compute()
 
         draw_lidar(data.points, &viewer->scene);
     }
-    catch (std::exception& e)
-    {
-    };
+    catch (Ice::Exception& e){ std::cout << e.what() << std::endl; };
 
     // logic to avoid hitting the wall.
     // Takes lidar data and returns new values for adv and rot
-    auto [adv, rot] = navigation(data.points);
-
-    try { omnirobot_proxy->setSpeedBase(0.f, adv, rot); }
-    catch (std::exception& e)
-    {
-    };
+     auto [adv, rot] = navigation(data.points);
+    //
+     try { omnirobot_proxy->setSpeedBase(0.f, adv, rot); }
+    catch (std::exception& e){ std::cout << e.what() << std::endl; };
 }
 
 void SpecificWorker::new_target_slot(QPointF p)
@@ -117,57 +113,68 @@ void SpecificWorker::new_target_slot(QPointF p)
     qInfo() << p;
 }
 
+auto SpecificWorker::cono(const RoboCompLidar3D::TPoints& points, float minAngle,
+                          float maxAngle, float distance)
+{
+    return points | std::views::filter([=, this](const auto& point)
+    {
+        bool inAngle = (point.phi > minAngle) and (point.phi < maxAngle);
+        if (not inAngle) return false;
+
+        if (distance > 0)
+            return (point.distance2d < distance) && (point.distance2d > this->ROBOT_LENGTH / 2.1);
+        return true;
+    });
+}
+
 std::tuple<float, float> SpecificWorker::navigation(const RoboCompLidar3D::TPoints& points)
 {
-    float minDistance = 300.f, rot = 0.f;
-    static RobotState state = RobotState::Advance;
+    float minDistance = 400.f;
+    static float rot = 0.f;
+    float adv = 500;
 
-    auto visiblePoints = points | std::views::filter([&](const auto& point)
-    {
-        return (point.phi > -(M_PI / 4)) && (point.phi < (M_PI / 4));
-    }) | std::views::filter([&](const auto& point)
-    {
-        return point.distance2d < minDistance && point.distance2d > 100;
-    });
-
-    auto minIt = std::min(visiblePoints.begin(), visiblePoints.end(), [](const auto& itA, const auto& itB)
-    {
-        auto a = *itA;
-        auto b = *itB;
-        return a.distance2d < b.distance2d;
-    });
-
-    if (minIt != visiblePoints.end())
-    {
-        auto min = *minIt;
-        if (min.r < 0.f)
-        {
-            rot = 1.f;
-        }
-        else
-        {
-            rot = -1.f;
-        }
-
-        state = RobotState::Rotate;
-    }
 
     switch (state)
     {
     case RobotState::Rotate:
         {
+            auto myPoints = cono(points, -(M_PI / 4), (M_PI / 4), 700);
+            if (myPoints.empty())
+            {
+                state = RobotState::Advance;
+                return std::make_tuple(adv, 0);
+            }
+
             std::cout << "Rotate worker" << std::endl;
             return std::make_tuple(0, rot);
         }
     case RobotState::Advance:
         {
+            auto myPoints = cono(points, -(M_PI / 4), (M_PI / 4), 700);
+            if (!myPoints.empty())
+            {
+                auto min = myPoints.front();
+                if (min.phi < 0.f)
+                {
+                    rot = 1.f;
+                }
+                else
+                {
+                    rot = -1.f;
+                }
+
+                state = RobotState::Rotate;
+                return std::make_tuple(0, rot);
+            }
+
             std::cout << "Advance worker" << std::endl;
-            return std::make_tuple(500, 0);
+            return std::make_tuple(adv, 0);
         }
     }
 
     return std::make_tuple(0, 0);
 }
+
 
 void SpecificWorker::draw_lidar(const auto& points, QGraphicsScene* scene)
 {
@@ -183,15 +190,9 @@ void SpecificWorker::draw_lidar(const auto& points, QGraphicsScene* scene)
     const QPen pen(color, 10);
     //const QBrush brush(color, Qt::SolidPattern);
 
-    auto visiblePoints = points | std::views::filter([&](const auto& point)
-    {
-        return (point.phi > (-M_PI / 4)) && (point.phi < (M_PI / 4));
-    }) | std::views::filter([&](const auto& point)
-    {
-        return point.distance2d > 100;
-    });
+    auto myPoints = cono(points, -0.01, 0.01, 0);
 
-    for (const auto& p : visiblePoints)
+    for (const auto& p : myPoints)
     {
         const auto dp = scene->addRect(-25, -25, 50, 50, pen);
         dp->setPos(p.x, p.y);

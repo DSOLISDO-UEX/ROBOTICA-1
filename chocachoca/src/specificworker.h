@@ -106,6 +106,11 @@ private:
     AbstractGraphicViewer* viewer;
     const int ROBOT_LENGTH = 400;
     QGraphicsItem* robot_polygon;
+    RobotState state = RobotState::Advance;
+
+    // utils
+    auto cono(const RoboCompLidar3D::TPoints& points, float minAngle,
+                                                       float maxAngle, float distance);
 
 
 signals:
