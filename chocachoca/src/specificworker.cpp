@@ -129,52 +129,49 @@ auto SpecificWorker::cono(const RoboCompLidar3D::TPoints& points, float minAngle
 
 std::tuple<float, float> SpecificWorker::navigation(const RoboCompLidar3D::TPoints& points)
 {
-    float minDistance = 400.f;
-    static float rot = 0.f;
-    float adv = 500;
+    const float maxAdv = 500.f;
+    const float safeDist = 700.f;
+    const float coneAngle = M_PI / 4.f;
 
+    static float rot = 0.f;
+    static int extraTurn = 0;
+
+    auto frontPoints = cono(points, -coneAngle, coneAngle, safeDist);
+    const bool obstacleAhead = !frontPoints.empty();
 
     switch (state)
     {
-    case RobotState::Rotate:
-        {
-            auto myPoints = cono(points, -(M_PI / 4), (M_PI / 4), 700);
-            if (myPoints.empty())
-            {
-                state = RobotState::Advance;
-                return std::make_tuple(adv, 0);
-            }
-
-            std::cout << "Rotate worker" << std::endl;
-            return std::make_tuple(0, rot);
-        }
     case RobotState::Advance:
+        if (obstacleAhead)
         {
-            auto myPoints = cono(points, -(M_PI / 4), (M_PI / 4), 700);
-            if (!myPoints.empty())
-            {
-                auto min = myPoints.front();
-                if (min.phi < 0.f)
-                {
-                    rot = 1.f;
-                }
-                else
-                {
-                    rot = -1.f;
-                }
+            auto closest = std::ranges::min_element(frontPoints, {}, &RoboCompLidar3D::TPoint::distance2d);
+            rot = (closest->phi < 0.f) ? 1.f : -1.f;
 
-                state = RobotState::Rotate;
-                return std::make_tuple(0, rot);
-            }
-
-            std::cout << "Advance worker" << std::endl;
-            return std::make_tuple(adv, 0);
+            extraTurn = 5 + (std::rand() % 20);
+            state = RobotState::Rotate;
         }
+        break;
+
+    case RobotState::Rotate:
+        if (!obstacleAhead)
+        {
+            if (extra_turn_cycles > 0)
+                extra_turn_cycles--;
+            else
+                state = RobotState::Advance;
+        }
+        break;
     }
 
-    return std::make_tuple(0, 0);
-}
+    if (state == RobotState::Rotate)
+    {
+        std::cout << "Rotate worker" << std::endl;
+        return {0.f, rot};
+    }
 
+    std::cout << "Advance worker" << std::endl;
+    return {maxAdv, 0.f};
+}
 
 void SpecificWorker::draw_lidar(const auto& points, QGraphicsScene* scene)
 {
