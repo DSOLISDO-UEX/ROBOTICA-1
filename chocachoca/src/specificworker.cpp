@@ -18,8 +18,19 @@
  */
 #include "specificworker.h"
 
-SpecificWorker::SpecificWorker(const ConfigLoader& configLoader, TuplePrx tprx, bool startup_check) : GenericWorker(
-    configLoader, tprx)
+#define MAX_ADV_VELOCITY 1000.f  // mm/s (Slightly lower to reduce braking inertia)
+#define MAX_ROT_VELOCITY 1.2f    // rad/s
+#define CONE_ANGLE (M_PI / 3.2f) // ~56 degrees (Covers robot width and spiral curve)
+#define SAFE_DISTANCE 750.f      // mm (Distance to trigger obstacle avoidance)
+#define CLEAR_DISTANCE 900.f     // mm (Hysteresis: distance required to resume Advance)
+
+// Spiral parameters
+#define SPIRAL_ADV_SPEED_DECREMENT_FACTOR 1.5f
+#define SPIRAL_ROT_SPEED_DECREMENT 0.003f
+#define SPIRAL_MIN_ROT_THRESHOLD 0.05f
+
+SpecificWorker::SpecificWorker(const ConfigLoader &configLoader, TuplePrx tprx, bool startup_check) : GenericWorker(
+                                                                                                          configLoader, tprx)
 {
     this->startup_check_flag = startup_check;
     if (this->startup_check_flag)
@@ -65,7 +76,6 @@ SpecificWorker::~SpecificWorker()
     std::cout << "Destroying SpecificWorker" << std::endl;
 }
 
-
 void SpecificWorker::initialize()
 {
     std::cout << "initialize worker" << std::endl;
@@ -81,9 +91,9 @@ void SpecificWorker::initialize()
     connect(viewer, &AbstractGraphicViewer::new_mouse_coordinates, this, &SpecificWorker::new_target_slot);
 }
 
-
 void SpecificWorker::compute()
 {
+    std::srand(std::time(nullptr));
     fps.print("Compute worker", 3000);
 
     RoboCompLidar3D::TData data;
@@ -98,14 +108,23 @@ void SpecificWorker::compute()
 
         draw_lidar(data.points, &viewer->scene);
     }
-    catch (Ice::Exception& e){ std::cout << e.what() << std::endl; };
+    catch (Ice::Exception &e)
+    {
+        std::cout << e.what() << std::endl;
+    };
 
     // logic to avoid hitting the wall.
     // Takes lidar data and returns new values for adv and rot
-     auto [adv, rot] = navigation(data.points);
+    auto [adv, rot] = navigation(data.points);
     //
-     try { omnirobot_proxy->setSpeedBase(0.f, adv, rot); }
-    catch (std::exception& e){ std::cout << e.what() << std::endl; };
+    try
+    {
+        omnirobot_proxy->setSpeedBase(0.f, adv, rot);
+    }
+    catch (std::exception &e)
+    {
+        std::cout << e.what() << std::endl;
+    };
 }
 
 void SpecificWorker::new_target_slot(QPointF p)
@@ -113,70 +132,110 @@ void SpecificWorker::new_target_slot(QPointF p)
     qInfo() << p;
 }
 
-auto SpecificWorker::cono(const RoboCompLidar3D::TPoints& points, float minAngle,
+auto SpecificWorker::cono(const RoboCompLidar3D::TPoints &points, float minAngle,
                           float maxAngle, float distance)
 {
-    return points | std::views::filter([=, this](const auto& point)
-    {
+    return points | std::views::filter([=, this](const auto &point)
+                                       {
         bool inAngle = (point.phi > minAngle) and (point.phi < maxAngle);
         if (not inAngle) return false;
 
         if (distance > 0)
-            return (point.distance2d < distance) && (point.distance2d > this->ROBOT_LENGTH / 2.1);
-        return true;
-    });
+            return (point.distance2d < distance) && (point.distance2d > this->ROBOT_LENGTH / 1.2);
+        return true; });
 }
 
-std::tuple<float, float> SpecificWorker::navigation(const RoboCompLidar3D::TPoints& points)
+std::tuple<float, float> SpecificWorker::navigation(const RoboCompLidar3D::TPoints &points)
 {
-    const float maxAdv = 500.f;
-    const float safeDist = 700.f;
-    const float coneAngle = M_PI / 4.f;
+    static auto stateStartTime = std::chrono::steady_clock::now();
+    static int targetAdvanceDuration = 4; // Start with 4s of advance instead of 0s
+    static float spiralRot = 0.f;
+    static float lockedRotVel = MAX_ROT_VELOCITY; // Stores the chosen turn direction
 
-    static float rot = 0.f;
-    static int extraTurn = 0;
-
-    auto frontPoints = cono(points, -coneAngle, coneAngle, safeDist);
+    // Cone to trigger obstacle avoidance
+    auto frontPoints = cono(points, -CONE_ANGLE, CONE_ANGLE, SAFE_DISTANCE);
     const bool obstacleAhead = !frontPoints.empty();
+
+    // Slightly deeper cone to make sure the path is truly clear before exiting Rotate (Hysteresis)
+    auto clearPoints = cono(points, -CONE_ANGLE, CONE_ANGLE, CLEAR_DISTANCE);
+    const bool pathIsClear = clearPoints.empty();
+
+    // Chooses rotation direction ONCE when entering Rotate
+    auto startRotation = [&]() -> std::tuple<float, float>
+    {
+        auto closest = std::ranges::min_element(frontPoints, {}, &RoboCompLidar3D::TPoint::distance2d);
+
+        // Turn away from the closest obstacle's angle
+        // Note: Flip -1.f and 1.f here if your robot's positive rotation goes toward positive phi
+        float rotDir = (closest->phi < 0.f) ? 1.f : -1.f;
+
+        lockedRotVel = rotDir * MAX_ROT_VELOCITY;
+        state = RobotState::Rotate;
+        return {0.f, lockedRotVel};
+    };
 
     switch (state)
     {
     case RobotState::Advance:
+    {
         if (obstacleAhead)
-        {
-            auto closest = std::ranges::min_element(frontPoints, {}, &RoboCompLidar3D::TPoint::distance2d);
-            rot = (closest->phi < 0.f) ? 1.f : -1.f;
+            return startRotation();
 
-            extraTurn = 5 + (std::rand() % 20);
-            state = RobotState::Rotate;
+        auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
+                           std::chrono::steady_clock::now() - stateStartTime)
+                           .count();
+
+        if (elapsed >= targetAdvanceDuration)
+        {
+            spiralRot = MAX_ROT_VELOCITY;
+            state = RobotState::Spiral;
         }
-        break;
+
+        return {MAX_ADV_VELOCITY, 0.f};
+    }
 
     case RobotState::Rotate:
-        if (!obstacleAhead)
-        {
-            if (extra_turn_cycles > 0)
-                extra_turn_cycles--;
-            else
-                state = RobotState::Advance;
-        }
-        break;
-    }
-
-    if (state == RobotState::Rotate)
     {
-        std::cout << "Rotate worker" << std::endl;
-        return {0.f, rot};
+        // Wait until the deeper CLEAR_DISTANCE cone is empty before moving forward again
+        if (pathIsClear)
+        {
+            stateStartTime = std::chrono::steady_clock::now();
+            targetAdvanceDuration = (std::rand() % 4) + 3;
+            state = RobotState::Advance;
+            return {MAX_ADV_VELOCITY, 0.f};
+        }
+
+        // Keep rotating in the locked direction without recalculating/flipping
+        return {0.f, lockedRotVel};
     }
 
-    std::cout << "Advance worker" << std::endl;
-    return {maxAdv, 0.f};
+    case RobotState::Spiral:
+    {
+        if (obstacleAhead)
+            return startRotation();
+
+        float adv = MAX_ADV_VELOCITY / SPIRAL_ADV_SPEED_DECREMENT_FACTOR;
+        spiralRot -= SPIRAL_ROT_SPEED_DECREMENT;
+
+        if (spiralRot <= SPIRAL_MIN_ROT_THRESHOLD)
+        {
+            stateStartTime = std::chrono::steady_clock::now();
+            targetAdvanceDuration = (std::rand() % 4) + 3;
+            state = RobotState::Advance;
+            return {MAX_ADV_VELOCITY, 0.f};
+        }
+
+        return {adv, spiralRot};
+    }
+    }
+
+    return {0.f, 0.f};
 }
 
-void SpecificWorker::draw_lidar(const auto& points, QGraphicsScene* scene)
+void SpecificWorker::draw_lidar(const auto &points, QGraphicsScene *scene)
 {
-    static std::vector<QGraphicsItem*> draw_points;
-    for (const auto& p : draw_points)
+    static std::vector<QGraphicsItem *> draw_points;
+    for (const auto &p : draw_points)
     {
         scene->removeItem(p);
         delete p;
@@ -185,11 +244,11 @@ void SpecificWorker::draw_lidar(const auto& points, QGraphicsScene* scene)
 
     const QColor color("LightGreen");
     const QPen pen(color, 10);
-    //const QBrush brush(color, Qt::SolidPattern);
+    // const QBrush brush(color, Qt::SolidPattern);
 
-    auto myPoints = cono(points, -0.01, 0.01, 0);
+    auto myPoints = cono(points, -CONE_ANGLE, CONE_ANGLE, SAFE_DISTANCE);
 
-    for (const auto& p : myPoints)
+    for (const auto &p : myPoints)
     {
         const auto dp = scene->addRect(-25, -25, 50, 50, pen);
         dp->setPos(p.x, p.y);
@@ -197,25 +256,22 @@ void SpecificWorker::draw_lidar(const auto& points, QGraphicsScene* scene)
     }
 }
 
-
 void SpecificWorker::emergency()
 {
     fps.print("Emergency worker", 3000);
-    //emergencyCODE
+    // emergencyCODE
     //
-    //if (SUCCESSFUL) //The componet is safe for continue
-    //  emmit goToRestore()
+    // if (SUCCESSFUL) //The componet is safe for continue
+    //   emmit goToRestore()
 }
 
-
-//Execute one when exiting to emergencyState
+// Execute one when exiting to emergencyState
 void SpecificWorker::restore()
 {
     std::cout << "Restore worker" << std::endl;
-    //restoreCODE
-    //Restore emergency component
+    // restoreCODE
+    // Restore emergency component
 }
-
 
 int SpecificWorker::startup_check()
 {
@@ -223,7 +279,6 @@ int SpecificWorker::startup_check()
     QTimer::singleShot(200, QCoreApplication::instance(), SLOT(quit()));
     return 0;
 }
-
 
 /**************************************/
 // From the RoboCompCamera360RGB you can call this methods:

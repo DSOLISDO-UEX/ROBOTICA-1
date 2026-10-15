@@ -35,7 +35,8 @@
 enum class RobotState : uint8_t
 {
     Advance = 0,
-    Rotate
+    Rotate,
+    Spiral
 };
 
 /**
