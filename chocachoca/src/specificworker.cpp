@@ -18,16 +18,18 @@
  */
 #include "specificworker.h"
 
-#define MAX_ADV_VELOCITY 1000.f  // mm/s (Slightly lower to reduce braking inertia)
-#define MAX_ROT_VELOCITY 1.2f    // rad/s
-#define CONE_ANGLE (M_PI / 3.2f) // ~56 degrees (Covers robot width and spiral curve)
-#define SAFE_DISTANCE 750.f      // mm (Distance to trigger obstacle avoidance)
-#define CLEAR_DISTANCE 900.f     // mm (Hysteresis: distance required to resume Advance)
+// Faster speeds & adjusted braking distances
+#define MAX_ADV_VELOCITY 1000.f                 // mm/s (Faster linear speed)
+#define MAX_ROT_VELOCITY 1.0f                   // rad/s (Faster rotation when dodging obstacles)
+#define CONE_ANGLE (M_PI / 3.2f)                // ~56 degrees
+#define SAFE_DISTANCE 600.f                     // mm (Increased slightly to compensate for higher speed)
+#define CLEAR_DISTANCE 1000.f                   // mm (Hysteresis clearance distance)
 
-// Spiral parameters
-#define SPIRAL_ADV_SPEED_DECREMENT_FACTOR 1.5f
-#define SPIRAL_ROT_SPEED_DECREMENT 0.003f
-#define SPIRAL_MIN_ROT_THRESHOLD 0.05f
+// Spiral parameters (Tuned for a wider radius)
+#define SPIRAL_ADV_SPEED_DECREMENT_FACTOR 1.2f  // Keeps spiral linear speed high (1600 / 1.2 = 1333 mm/s)
+#define SPIRAL_INITIAL_ROT 0.8f                 // rad/s (Lower starting rot = much wider initial radius)
+#define SPIRAL_ROT_SPEED_DECREMENT 0.002f       // Opens the spiral smoothly
+#define SPIRAL_MIN_ROT_THRESHOLD 0.05f          // Safety floor so spiralRot never goes negative
 
 SpecificWorker::SpecificWorker(const ConfigLoader &configLoader, TuplePrx tprx, bool startup_check) : GenericWorker(
                                                                                                           configLoader, tprx)
@@ -144,34 +146,37 @@ auto SpecificWorker::cono(const RoboCompLidar3D::TPoints &points, float minAngle
             return (point.distance2d < distance) && (point.distance2d > this->ROBOT_LENGTH / 1.2);
         return true; });
 }
-
 std::tuple<float, float> SpecificWorker::navigation(const RoboCompLidar3D::TPoints &points)
 {
     static auto stateStartTime = std::chrono::steady_clock::now();
-    static int targetAdvanceDuration = 4; // Start with 4s of advance instead of 0s
-    static float spiralRot = 0.f;
-    static float lockedRotVel = MAX_ROT_VELOCITY; // Stores the chosen turn direction
+    static int targetAdvanceDuration = (std::rand() % 4) + 3; // 3 to 6 seconds
+    static int targetSpiralDuration = (std::rand() % 4) + 3;  // 3 to 6 seconds
+    static float spiralRot = SPIRAL_INITIAL_ROT;
+    static float spiralSign = 1.f; // 1.f o -1.f para el sentido de la espiral
+    static float lockedRotVel = MAX_ROT_VELOCITY;
 
-    // Cone to trigger obstacle avoidance
     auto frontPoints = cono(points, -CONE_ANGLE, CONE_ANGLE, SAFE_DISTANCE);
     const bool obstacleAhead = !frontPoints.empty();
 
-    // Slightly deeper cone to make sure the path is truly clear before exiting Rotate (Hysteresis)
     auto clearPoints = cono(points, -CONE_ANGLE, CONE_ANGLE, CLEAR_DISTANCE);
     const bool pathIsClear = clearPoints.empty();
 
-    // Chooses rotation direction ONCE when entering Rotate
     auto startRotation = [&]() -> std::tuple<float, float>
     {
         auto closest = std::ranges::min_element(frontPoints, {}, &RoboCompLidar3D::TPoint::distance2d);
-
-        // Turn away from the closest obstacle's angle
-        // Note: Flip -1.f and 1.f here if your robot's positive rotation goes toward positive phi
-        float rotDir = (closest->phi < 0.f) ? 1.f : -1.f;
-
+        float rotDir = (closest->phi < 0.f) ? -1.f : 1.f;
+        
         lockedRotVel = rotDir * MAX_ROT_VELOCITY;
         state = RobotState::Rotate;
         return {0.f, lockedRotVel};
+    };
+
+    auto startAdvance = [&]() -> std::tuple<float, float>
+    {
+        stateStartTime = std::chrono::steady_clock::now();
+        targetAdvanceDuration = (std::rand() % 4) + 3; // Random 3-6s for Advance
+        state = RobotState::Advance;
+        return {MAX_ADV_VELOCITY, 0.f};
     };
 
     switch (state)
@@ -187,7 +192,10 @@ std::tuple<float, float> SpecificWorker::navigation(const RoboCompLidar3D::TPoin
 
         if (elapsed >= targetAdvanceDuration)
         {
-            spiralRot = MAX_ROT_VELOCITY;
+            stateStartTime = std::chrono::steady_clock::now();
+            targetSpiralDuration = (std::rand() % 4) + 3; // Random 3-6s for Spiral
+            spiralRot = SPIRAL_INITIAL_ROT;               // Starts with a wider radius
+            spiralSign = (std::rand() % 2 == 0) ? 1.f : -1.f; // 50% probabilidad izq / der
             state = RobotState::Spiral;
         }
 
@@ -196,16 +204,9 @@ std::tuple<float, float> SpecificWorker::navigation(const RoboCompLidar3D::TPoin
 
     case RobotState::Rotate:
     {
-        // Wait until the deeper CLEAR_DISTANCE cone is empty before moving forward again
         if (pathIsClear)
-        {
-            stateStartTime = std::chrono::steady_clock::now();
-            targetAdvanceDuration = (std::rand() % 4) + 3;
-            state = RobotState::Advance;
-            return {MAX_ADV_VELOCITY, 0.f};
-        }
+            return startAdvance();
 
-        // Keep rotating in the locked direction without recalculating/flipping
         return {0.f, lockedRotVel};
     }
 
@@ -214,18 +215,18 @@ std::tuple<float, float> SpecificWorker::navigation(const RoboCompLidar3D::TPoin
         if (obstacleAhead)
             return startRotation();
 
+        auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
+                           std::chrono::steady_clock::now() - stateStartTime)
+                           .count();
+
         float adv = MAX_ADV_VELOCITY / SPIRAL_ADV_SPEED_DECREMENT_FACTOR;
         spiralRot -= SPIRAL_ROT_SPEED_DECREMENT;
 
-        if (spiralRot <= SPIRAL_MIN_ROT_THRESHOLD)
-        {
-            stateStartTime = std::chrono::steady_clock::now();
-            targetAdvanceDuration = (std::rand() % 4) + 3;
-            state = RobotState::Advance;
-            return {MAX_ADV_VELOCITY, 0.f};
-        }
+        // Transition back to Advance after the random duration OR if the spiral becomes a straight line
+        if (elapsed >= targetSpiralDuration || spiralRot <= SPIRAL_MIN_ROT_THRESHOLD)
+            return startAdvance();
 
-        return {adv, spiralRot};
+        return {adv, spiralSign * spiralRot};
     }
     }
 
