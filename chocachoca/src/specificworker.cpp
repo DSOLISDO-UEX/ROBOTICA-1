@@ -25,6 +25,12 @@
 #define SAFE_DISTANCE 600.f                     // mm (Increased slightly to compensate for higher speed)
 #define CLEAR_DISTANCE 1000.f                   // mm (Hysteresis clearance distance)
 
+// Fordward to spiral and spiral to fordward
+#define MIN_RANDOM_FORDWARD_TO_SPIRAL_DURATION 3 // seconds
+#define MAX_RANDOM_FORDWARD_TO_SPIRAL_DURATION 10 // seconds
+#define MIN_RANDOM_SPIRAL_TO_FORDWARD_DURATION 3 // seconds
+#define MAX_RANDOM_SPIRAL_TO_FORDWARD_DURATION 6 // seconds
+
 // Spiral parameters (Tuned for a wider radius)
 #define SPIRAL_ADV_SPEED_DECREMENT_FACTOR 1.2f  // Keeps spiral linear speed high (1600 / 1.2 = 1333 mm/s)
 #define SPIRAL_INITIAL_ROT 0.8f                 // rad/s (Lower starting rot = much wider initial radius)
@@ -149,8 +155,8 @@ auto SpecificWorker::cono(const RoboCompLidar3D::TPoints &points, float minAngle
 std::tuple<float, float> SpecificWorker::navigation(const RoboCompLidar3D::TPoints &points)
 {
     static auto stateStartTime = std::chrono::steady_clock::now();
-    static int targetAdvanceDuration = (std::rand() % 4) + 3; // 3 to 6 seconds
-    static int targetSpiralDuration = (std::rand() % 4) + 3;  // 3 to 6 seconds
+    static int targetAdvanceDuration = (std::rand() % (MAX_RANDOM_FORDWARD_TO_SPIRAL_DURATION - MIN_RANDOM_FORDWARD_TO_SPIRAL_DURATION + 1)) + MIN_RANDOM_FORDWARD_TO_SPIRAL_DURATION; // 3 to 6 seconds
+    static int targetSpiralDuration = (std::rand() % (MAX_RANDOM_SPIRAL_TO_FORDWARD_DURATION - MIN_RANDOM_SPIRAL_TO_FORDWARD_DURATION + 1)) + MIN_RANDOM_SPIRAL_TO_FORDWARD_DURATION;  // 3 to 6 seconds
     static float spiralRot = SPIRAL_INITIAL_ROT;
     static float spiralSign = 1.f; // 1.f o -1.f para el sentido de la espiral
     static float lockedRotVel = MAX_ROT_VELOCITY;
@@ -174,7 +180,7 @@ std::tuple<float, float> SpecificWorker::navigation(const RoboCompLidar3D::TPoin
     auto startAdvance = [&]() -> std::tuple<float, float>
     {
         stateStartTime = std::chrono::steady_clock::now();
-        targetAdvanceDuration = (std::rand() % 4) + 3; // Random 3-6s for Advance
+        targetAdvanceDuration = (std::rand() % (MAX_RANDOM_FORDWARD_TO_SPIRAL_DURATION - MIN_RANDOM_FORDWARD_TO_SPIRAL_DURATION + 1)) + MIN_RANDOM_FORDWARD_TO_SPIRAL_DURATION; // Random 3-6s for Advance
         state = RobotState::Advance;
         return {MAX_ADV_VELOCITY, 0.f};
     };
@@ -193,7 +199,7 @@ std::tuple<float, float> SpecificWorker::navigation(const RoboCompLidar3D::TPoin
         if (elapsed >= targetAdvanceDuration)
         {
             stateStartTime = std::chrono::steady_clock::now();
-            targetSpiralDuration = (std::rand() % 4) + 3; // Random 3-6s for Spiral
+            targetSpiralDuration = (std::rand() % (MAX_RANDOM_SPIRAL_TO_FORDWARD_DURATION - MIN_RANDOM_SPIRAL_TO_FORDWARD_DURATION + 1)) + MIN_RANDOM_SPIRAL_TO_FORDWARD_DURATION; // Random 3-6s for Spiral
             spiralRot = SPIRAL_INITIAL_ROT;               // Starts with a wider radius
             spiralSign = (std::rand() % 2 == 0) ? 1.f : -1.f; // 50% probabilidad izq / der
             state = RobotState::Spiral;
