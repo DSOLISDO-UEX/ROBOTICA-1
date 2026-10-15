@@ -29,7 +29,7 @@
 #define MIN_RANDOM_FORDWARD_TO_SPIRAL_DURATION 3 // seconds
 #define MAX_RANDOM_FORDWARD_TO_SPIRAL_DURATION 10 // seconds
 #define MIN_RANDOM_SPIRAL_TO_FORDWARD_DURATION 3 // seconds
-#define MAX_RANDOM_SPIRAL_TO_FORDWARD_DURATION 6 // seconds
+#define MAX_RANDOM_SPIRAL_TO_FORDWARD_DURATION 8 // seconds
 
 // Spiral parameters (Tuned for a wider radius)
 #define SPIRAL_ADV_SPEED_DECREMENT_FACTOR 1.2f  // Keeps spiral linear speed high (1600 / 1.2 = 1333 mm/s)
@@ -210,7 +210,7 @@ std::tuple<float, float> SpecificWorker::navigation(const RoboCompLidar3D::TPoin
 
     case RobotState::Rotate:
     {
-        if (pathIsClear)
+        if (!obstacleAhead)
             return startAdvance();
 
         return {0.f, lockedRotVel};
@@ -218,7 +218,7 @@ std::tuple<float, float> SpecificWorker::navigation(const RoboCompLidar3D::TPoin
 
     case RobotState::Spiral:
     {
-        if (obstacleAhead)
+        if (!pathIsClear)
             return startRotation();
 
         auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
