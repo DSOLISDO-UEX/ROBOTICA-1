@@ -26,10 +26,10 @@
 #define CLEAR_DISTANCE 1000.f                   // mm (Hysteresis clearance distance)
 
 // Fordward to spiral and spiral to fordward
-#define MIN_RANDOM_FORDWARD_TO_SPIRAL_DURATION 3 // seconds
-#define MAX_RANDOM_FORDWARD_TO_SPIRAL_DURATION 10 // seconds
-#define MIN_RANDOM_SPIRAL_TO_FORDWARD_DURATION 3 // seconds
-#define MAX_RANDOM_SPIRAL_TO_FORDWARD_DURATION 8 // seconds
+#define MIN_RANDOM_FORDWARD_TO_SPIRAL_DURATION 2 // seconds
+#define MAX_RANDOM_FORDWARD_TO_SPIRAL_DURATION 8 // seconds
+#define MIN_RANDOM_SPIRAL_TO_FORDWARD_DURATION 5 // seconds
+#define MAX_RANDOM_SPIRAL_TO_FORDWARD_DURATION 10 // seconds
 
 // Spiral parameters (Tuned for a wider radius)
 #define SPIRAL_ADV_SPEED_DECREMENT_FACTOR 1.2f  // Keeps spiral linear speed high (1600 / 1.2 = 1333 mm/s)
@@ -124,7 +124,6 @@ void SpecificWorker::compute()
     // logic to avoid hitting the wall.
     // Takes lidar data and returns new values for adv and rot
     auto [adv, rot] = navigation(data.points);
-    //
     try
     {
         omnirobot_proxy->setSpeedBase(0.f, adv, rot);
