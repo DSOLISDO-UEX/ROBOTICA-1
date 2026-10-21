@@ -90,11 +90,20 @@ void SpecificWorker::compute()
 		data = this->lidar3d_proxy->getLidarData("lidar", 0, 2 * M_PI, 2);
 		if (data.points.empty())
 		{
-			qFatal("No Lidar data");
+			qWarning("No Lidar data");
 			return;
 		}
 
 		draw_lidar(data.points, &viewer->scene);
+
+		RoboCompVisualElements::TObjects objects = visualelements_proxy->getVisualObjects(RoboCompVisualElements::TObjects{});
+
+		std::printf("Tamaño vector: %ull", objects.objects.size());
+
+		for (auto &obj : objects.objects)
+		{
+		}
+
 	}
 	catch (Ice::Exception &e)
 	{

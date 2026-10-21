@@ -3,7 +3,7 @@
 Camera360RGB = "camera360rgb:tcp -h localhost -p 10098"
 Lidar3D = "lidar3d:tcp -h localhost -p 11995"
 OmniRobot = "omnirobot:tcp -h localhost -p 10004"
-VisualElements = "visualelements:tcp -h localhost -p 10005"
+VisualElements = "visualelements:tcp -h localhost -p 11105"
 
 
 [Period]
