@@ -87,7 +87,7 @@ void SpecificWorker::compute()
 	RoboCompLidar3D::TData data;
 	try
 	{
-		data = lidar3d_proxy->getLidarData("lidar", 0, 2 * M_PI, 2);
+		data = this->lidar3d_proxy->getLidarData("lidar", 0, 2 * M_PI, 2);
 		if (data.points.empty())
 		{
 			qFatal("No Lidar data");

@@ -18,11 +18,11 @@
  */
 
 
-/** \mainpage RoboComp::chocachoca
+/** \mainpage RoboComp::personFollower
  *
  * \section intro_sec Introduction
  *
- * The chocachoca component...
+ * The personFollower component...
  *
  * \section interface_sec Interface
  *
@@ -34,7 +34,7 @@
  * ...
  *
  * \subsection install2_ssec Compile and install
- * cd chocachoca
+ * cd personFollower
  * <br>
  * cmake . && make
  * <br>
@@ -52,7 +52,7 @@
  *
  * \subsection execution_ssec Execution
  *
- * Just: "${PATH_TO_BINARY}/chocachoca --Ice.Config=${PATH_TO_CONFIG_FILE}"
+ * Just: "${PATH_TO_BINARY}/personFollower --Ice.Config=${PATH_TO_CONFIG_FILE}"
  *
  * \subsection running_ssec Once running
  *
@@ -87,8 +87,8 @@
 
 #define USE_QTGUI
 
-#define PROGRAM_NAME    "chocachoca"
-#define SERVER_FULL_NAME   "RoboComp chocachoca::chocachoca"
+#define PROGRAM_NAME    "personFollower"
+#define SERVER_FULL_NAME   "RoboComp personFollower::personFollower"
 
 
 template <typename ProxyType, typename ProxyPointer>
@@ -110,10 +110,10 @@ void require(const Ice::CommunicatorPtr& communicator,
 }
 
 
-class chocachoca : public Ice::Application
+class personFollower : public Ice::Application
 {
 public:
-	chocachoca (QString configFile, QString prfx, bool startup_check) { 
+	personFollower (QString configFile, QString prfx, bool startup_check) { 
 		this->configFile = configFile.toStdString();
 		this->prefix = prfx.toStdString();
 		this->startup_check_flag=startup_check; 
@@ -134,7 +134,7 @@ public:
 	virtual int run(int, char*[]);
 };
 
-Ice::InitializationData chocachoca::getInitializationDataIce(){
+Ice::InitializationData personFollower::getInitializationDataIce(){
         Ice::InitializationData initData;
         initData.properties = Ice::createProperties();
         initData.properties->setProperty("Ice.Warn.Connections", this->configLoader.get<std::string>("Ice.Warn.Connections"));
@@ -144,14 +144,14 @@ Ice::InitializationData chocachoca::getInitializationDataIce(){
 		return initData;
 }
 
-void chocachoca::initialize()
+void personFollower::initialize()
 {
     this->configLoader.load(this->configFile);
 	this->configLoader.printConfig();
 	std::cout<<std::endl;
 }
 
-int chocachoca::run(int argc, char* argv[])
+int personFollower::run(int argc, char* argv[])
 {
 #ifdef USE_QTGUI
 	QApplication a(argc, argv);  // GUI application
@@ -272,7 +272,7 @@ int main(int argc, char* argv[])
 		}
 
 	}
-	chocachoca app(configFile, prefix, startup_check_flag);
+	personFollower app(configFile, prefix, startup_check_flag);
 
 	return app.main(argc, argv, app.getInitializationDataIce());
 }

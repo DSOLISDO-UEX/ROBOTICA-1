@@ -3,7 +3,7 @@ import "OmniRobot.idsl";
 import "VisualElements.idsl";
 import "Camera360RGB.idsl";
 	
-Component chocachoca
+Component personFollower
 {
    Communications
    {
