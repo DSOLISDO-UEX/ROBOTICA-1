@@ -31,6 +31,7 @@
 #include <genericworker.h>
 #include <abstract_graphic_viewer/abstract_graphic_viewer.h>
 #include <format>
+#include <print>
 
 enum class RobotState : uint8_t
 {
