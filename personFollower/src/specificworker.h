@@ -28,15 +28,23 @@
 // If you want to reduce the period automatically due to lack of use, you must uncomment the following line
 // #define HIBERNATION_ENABLED
 
+#ifdef emit
+#undef emit
+#endif
+
+#include <algorithm>
+#include <execution>
+#include<cppitertools/enumerate.hpp>
 #include <genericworker.h>
 #include <abstract_graphic_viewer/abstract_graphic_viewer.h>
 #include <format>
 #include <print>
+#include <Eigen/Dense>
 
 enum class RobotState : uint8_t
 {
-	Advance = 0,
-	Rotate
+    Advance = 0,
+    Rotate
 };
 
 /**
@@ -44,77 +52,93 @@ enum class RobotState : uint8_t
  */
 class SpecificWorker : public GenericWorker
 {
-	Q_OBJECT
+    Q_OBJECT
 
 public:
-	/**
-	 * \brief Constructor for SpecificWorker.
-	 * \param configLoader Configuration loader for the component.
-	 * \param tprx Tuple of proxies required for the component.
-	 * \param startup_check Indicates whether to perform startup checks.
-	 */
-	SpecificWorker(const ConfigLoader &configLoader, TuplePrx tprx, bool startup_check);
+    /**
+     * \brief Constructor for SpecificWorker.
+     * \param configLoader Configuration loader for the component.
+     * \param tprx Tuple of proxies required for the component.
+     * \param startup_check Indicates whether to perform startup checks.
+     */
+    SpecificWorker(const ConfigLoader& configLoader, TuplePrx tprx, bool startup_check);
 
-	/**
-	 * \brief Destructor for SpecificWorker.
-	 */
-	~SpecificWorker();
+    /**
+     * \brief Destructor for SpecificWorker.
+     */
+    ~SpecificWorker();
 
-	void draw_lidar(const auto &points, QGraphicsScene *scene);
+    void draw_image(const RoboCompCamera360RGB::TImage& raw, const QRect& roi,
+                    const std::vector<QPointF>& projected_points, QLabel* label);
 
 public slots:
-	/**
-	 * \brief Initializes the worker one time.
-	 */
-	void initialize();
+    /**
+     * \brief Initializes the worker one time.
+     */
+    void initialize();
 
-	/**
-	 * \brief Main compute loop of the worker.
-	 */
-	void compute();
+    /**
+     * \brief Main compute loop of the worker.
+     */
+    void compute();
 
-	/**
-	 * \brief Handles the emergency state loop.
-	 */
-	void emergency();
+    /**
+     * \brief Handles the emergency state loop.
+     */
+    void emergency();
 
-	/**
-	 * \brief Restores the component from an emergency state.
-	 */
-	void restore();
+    /**
+     * \brief Restores the component from an emergency state.
+     */
+    void restore();
 
-	/**
-	 * \brief Performs startup checks for the component.
-	 * \return An integer representing the result of the checks.
-	 */
-	int startup_check();
+    /**
+     * \brief Performs startup checks for the component.
+     * \return An integer representing the result of the checks.
+     */
+    int startup_check();
 
-	void new_target_slot(QPointF);
+    void new_target_slot(QPointF);
 
-	/**
-	 *
-	 * \brief Checks the given point cloud to see if the robot would collide in any of its directions.
-	 * @return A tuple with 2 floats with the new speed (x, z) and the rotation needed.
-	 */
-	std::tuple<float, float> navigation(const RoboCompLidar3D::TPoints &points);
+    /**
+     *
+     * \brief Checks the given point cloud to see if the robot would collide in any of its directions.
+     * @return A tuple with 2 floats with the new speed (x, z) and the rotation needed.
+     */
+    std::tuple<float, float> navigation(const RoboCompLidar3D::TPoints& points);
 
 private:
-	/**
-	 * \brief Flag indicating whether startup checks are enabled.
-	 */
-	bool startup_check_flag;
-	QRectF dimensions;
-	AbstractGraphicViewer *viewer;
-	const int ROBOT_LENGTH = 400;
-	QGraphicsItem *robot_polygon;
-	RobotState state = RobotState::Advance;
+    /**
+     * \brief Flag indicating whether startup checks are enabled.
+     */
+    bool startup_check_flag;
+    QRectF dimensions;
+    AbstractGraphicViewer* viewer;
+    const int ROBOT_LENGTH = 400;
+    QGraphicsItem* robot_polygon;
+    RobotState state = RobotState::Advance;
 
-	// utils
-	auto cono(const RoboCompLidar3D::TPoints &points, float minAngle,
-			  float maxAngle, float distance);
+    // utils
+    auto cono(const RoboCompLidar3D::TPoints& points, float minAngle,
+              float maxAngle, float distance = 0);
+
+    void draw_person_in_lidar(float person_angle, float distance, QGraphicsScene* scene);
+
+    void draw_lidar(const auto& points, QGraphicsScene* scene);
+
+    RoboCompLidar3D::TPoints filter_isolated_points(const RoboCompLidar3D::TPoints& points, float d); // set to 200mm
+
+    std::optional<std::tuple<std::vector<QPointF>, float>> project_lidar_to_camera(
+        const RoboCompLidar3D::TPoints& points,
+        const Eigen::Isometry3d& cam_transform,
+        double personAngle,
+        const RoboCompCamera360RGB::TImage& image,
+        const QRect& roi,
+        double azimuth_sign = 1,
+        double azimuth_offset = 1);
 
 signals:
-	// void customSignal();
+    // void customSignal();
 };
 
 #endif
