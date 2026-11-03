@@ -20,8 +20,8 @@
 #include <cmath>
 #include <iostream>
 
-SpecificWorker::SpecificWorker(const ConfigLoader &configLoader, TuplePrx tprx, bool startup_check) : GenericWorker(
-                                                                                                          configLoader, tprx)
+SpecificWorker::SpecificWorker(const ConfigLoader& configLoader, TuplePrx tprx, bool startup_check) : GenericWorker(
+    configLoader, tprx)
 {
     this->startup_check_flag = startup_check;
     if (this->startup_check_flag)
@@ -75,7 +75,7 @@ void SpecificWorker::compute()
     {
         ldata = lidar3d_proxy->getLidarData("bpearl", 0, 2 * M_PI, 1);
     }
-    catch (const Ice::Exception &e)
+    catch (const Ice::Exception& e)
     {
         std::cerr << "LiDAR Error: " << e << std::endl;
         stopRobot();
@@ -87,7 +87,7 @@ void SpecificWorker::compute()
     {
         objects = visualelements_proxy->getVisualObjects(RoboCompVisualElements::TObjects{});
     }
-    catch (const Ice::Exception &e)
+    catch (const Ice::Exception& e)
     {
         std::cerr << "VisualElements Error: " << e << std::endl;
         stopRobot();
@@ -106,7 +106,7 @@ void SpecificWorker::compute()
     {
         img = camera360rgb_proxy->getROI(-1, -1, -1, -1, -1, -1);
     }
-    catch (const Ice::Exception &e)
+    catch (const Ice::Exception& e)
     {
         std::cerr << "Camera Error: " << e << std::endl;
         stopRobot();
@@ -119,35 +119,36 @@ void SpecificWorker::compute()
         return;
     }
 
-    const auto &person = objects.objects.front();
+    const auto& person = objects.objects.front();
     QRect roi = {person.left, person.top, person.right - person.left, person.bot - person.top};
 
     const double boxCenter = (person.left + person.right) / 2.0;
-    double personAngle = (2.0 * M_PI / img.width) * (boxCenter - (img.width / 2.0));
+    double personAngle = (2.0 * M_PI / img.width) * (boxCenter - img.width / 2.0);
 
     Eigen::Isometry3d camTransform = Eigen::Isometry3d::Identity();
     camTransform.pretranslate(-Eigen::Vector3d(0.f, -170.f, 1275.f));
 
-    auto res = project_lidar_to_camera(ldata.points, camTransform, personAngle, img, roi);
-    if (!res.has_value())
+    std::tuple<std::vector<QPointF>, float> res;
+    if (const auto res_ = project_lidar_to_camera(ldata.points, camTransform, personAngle, img, roi); not res_.
+        has_value())
     {
-        draw_image(img, roi, {}, label);
-        stopRobot();
+        qWarning() << "No lidar projection";
         return;
     }
+    else res = res_.value();
+    const auto& [prjPoints, depth] = res;
 
-    const auto &[prjPoints, depth] = res.value();
 
     draw_image(img, roi, {}, label);
     draw_person_in_lidar(static_cast<float>(personAngle), depth, &viewer->scene);
     draw_lidar(ldata.points, &viewer->scene);
 
     // P-Controller
-    constexpr float TARGET_DIST_MM = 1200.0f; // Target following distance: 1.2 m
-    constexpr float MAX_ADV_SPEED = 400.0f;   // Max linear speed (mm/s)
-    constexpr float MAX_ROT_SPEED = 0.6f;     // Max angular speed (rad/s)
-    constexpr float KP_DIST = 0.5f;           // Linear P gain
-    constexpr float KP_ROT = 1.2f;            // Angular P gain
+    constexpr float TARGET_DIST_MM = 300.0f; // Target following distance: 1.2 m
+    constexpr float MAX_ADV_SPEED = 1200.0f; // Max linear speed (mm/s)
+    constexpr float MAX_ROT_SPEED = 2.f; // Max angular speed (rad/s)
+    constexpr float KP_DIST = 0.5f; // Linear P gain
+    constexpr float KP_ROT = 1.2f; // Angular P gain
 
     float dist_error = depth - TARGET_DIST_MM;
 
@@ -173,7 +174,7 @@ void SpecificWorker::new_target_slot(QPointF p)
     qInfo() << p;
 }
 
-RoboCompLidar3D::TPoints SpecificWorker::filter_isolated_points(const RoboCompLidar3D::TPoints &points, float d)
+RoboCompLidar3D::TPoints SpecificWorker::filter_isolated_points(const RoboCompLidar3D::TPoints& points, float d)
 // set to 200mm
 {
     if (points.empty())
@@ -188,7 +189,7 @@ RoboCompLidar3D::TPoints SpecificWorker::filter_isolated_points(const RoboCompLi
 
     // Parallelize outer loop - each thread checks one point
     std::for_each(std::execution::par, indices.begin(), indices.end(), [&](size_t i)
-                  {
+    {
         const auto& p1 = points[i];
         // Sequential inner loop (avoid nested parallelism)
         for (auto&& [j,p2] : iter::enumerate(points))
@@ -201,86 +202,104 @@ RoboCompLidar3D::TPoints SpecificWorker::filter_isolated_points(const RoboCompLi
                 hasNeighbor[i] = true;
                 break;
             }
-        } });
+        }
+    });
 
     // Collect results
     std::vector<RoboCompLidar3D::TPoint> result;
     result.reserve(points.size());
-    for (auto &&[i, p] : iter::enumerate(points))
+    for (auto&& [i, p] : iter::enumerate(points))
         if (hasNeighbor[i])
             result.push_back(points[i]);
     return result;
 }
 
-auto SpecificWorker::cono(const RoboCompLidar3D::TPoints &points, float targetAngle, float halfConeWidth, float distance)
+RoboCompLidar3D::TPoints SpecificWorker::cono(const RoboCompLidar3D::TPoints& points, float minAngle, float maxAngle,
+                                              float distance)
 {
-    return points | std::views::filter([=, this](const auto &point)
-                                       {
-        // Azimuth from forward (+Y) to lateral (+X):
-        // Ahead = 0 rad, Right = positive, Left = negative (matches personAngle)
-        float point_angle = std::atan2(point.x, point.y);
+    // Filter points based on the specified angle range and distance
+    auto filtered = points | std::views::filter([=](const auto& point)
+    {
+        return point.phi >= minAngle && point.phi <= maxAngle && point.distance2d > distance;
+    });
 
-        // Circular angular difference wrapped to [-PI, PI]
-        float diff = std::remainder(point_angle - targetAngle, static_cast<float>(2.0 * M_PI));
-        if (std::abs(diff) > halfConeWidth)
-            return false;
 
-        if (distance > 0.0f)
-            return (point.distance2d < distance) && (point.distance2d > this->ROBOT_LENGTH / 1.2f);
-
-        return true; });
+    // Materialize view to vector to match return type RoboCompLidar3D::TPoints
+    return std::ranges::to<RoboCompLidar3D::TPoints>(filtered);
 }
+
 
 std::optional<std::tuple<std::vector<QPointF>, float>>
 SpecificWorker::project_lidar_to_camera(
-    const RoboCompLidar3D::TPoints &points,
-    const Eigen::Isometry3d &cam_transform,
+    const RoboCompLidar3D::TPoints& points,
+    const Eigen::Isometry3d& cam_transform,
     double personAngle,
-    const RoboCompCamera360RGB::TImage &image,
-    const QRect &roi,
+    const RoboCompCamera360RGB::TImage& image,
+    const QRect& roi,
     double azimuth_sign,
     double azimuth_offset)
 {
-    // Filter points within +/- 0.35 rad (~20 deg) of personAngle
-    auto filtered_cone = cono(points, static_cast<float>(personAngle), 0.35f, 6000.0f);
+    // filter points based on the specified angle range and distance
+    auto filtered_cone = cono(points, personAngle - 0.3, personAngle + 0.3);
+    if (filtered_cone.empty())
+    {
+        qWarning() << "Empty cone";
+        return {};
+    };
 
     std::vector<QPointF> projected_points;
     projected_points.reserve(points.size());
     std::vector<float> distances;
 
-    for (const auto &lp : filtered_cone)
+
+    for (const auto& lp : filtered_cone)
     {
+        // Convert Lidar point to Eigen vector
         Eigen::Vector3d p_lidar(lp.x, lp.y, lp.z);
+
+        // Transform point to Camera Local Frame
+        // P_cam = R_inv * (P_lidar - t)
         Eigen::Vector3d p_cam = cam_transform * p_lidar;
 
+
+        // Equirectangular Projection
         const double r = p_cam.norm();
-        if (r < 1e-6)
+        if (r < 1e-9)
+        {
+            projected_points.emplace_back(image.width / 2.0, image.height / 2.0);
             continue;
+        }
 
-        // Equirectangular projection
-        double u = ((azimuth_sign * std::atan2(p_cam.x(), p_cam.y()) + azimuth_offset) / (2.0 * M_PI) + 0.5) * image.width;
+
+        // Azimuth (u)
+        double u = ((azimuth_sign * std::atan2(p_cam.x(), p_cam.y()) + azimuth_offset) / (2.0 * M_PI) + 0.5) * image.
+            width;
         u = std::fmod(u, static_cast<double>(image.width));
-        if (u < 0.0)
-            u += image.width;
+        if (u < 0.0) u += image.width;
 
+
+        // Elevation (v)
         const double v = (std::asin(-p_cam.z() / r) / M_PI + 0.5) * image.height;
 
-        if (roi.contains(QPoint(static_cast<int>(u), static_cast<int>(v))))
+        // Check if the projected point is within the person's bounding box
+        if (roi.contains(QPoint(u, v)))
         {
             projected_points.emplace_back(u, v);
-            distances.push_back(static_cast<float>(r));
+            distances.push_back(r);
         }
     }
-
-    if (distances.empty())
-        return {};
-
+    
+    // compute the minimal depth of the projected points within the bounding box
+    if (distances.empty()) return {};
     float measured_depth = *std::ranges::min_element(distances);
+
+
     return std::make_tuple(projected_points, measured_depth);
 }
 
-void SpecificWorker::draw_image(const RoboCompCamera360RGB::TImage &raw, const QRect &roi,
-                                const std::vector<QPointF> &projected_points, QLabel *label)
+
+void SpecificWorker::draw_image(const RoboCompCamera360RGB::TImage& raw, const QRect& roi,
+                                const std::vector<QPointF>& projected_points, QLabel* label)
 {
     QImage img(raw.image.data(),
                raw.width,
@@ -311,7 +330,7 @@ void SpecificWorker::draw_image(const RoboCompCamera360RGB::TImage &raw, const Q
     // Draw projected points
     pen.setColor(Qt::blue);
     painter.setPen(pen);
-    for (const auto &pt : projected_points)
+    for (const auto& pt : projected_points)
         painter.drawPoint(pt);
 
     // Draw a vertical line at mid-width with thickness proportional to image height
@@ -339,10 +358,10 @@ void SpecificWorker::draw_image(const RoboCompCamera360RGB::TImage &raw, const Q
     label->setPixmap(QPixmap::fromImage(resized));
 }
 
-void SpecificWorker::draw_person_in_lidar(float person_angle, float distance, QGraphicsScene *scene)
+void SpecificWorker::draw_person_in_lidar(float person_angle, float distance, QGraphicsScene* scene)
 {
-    static std::vector<QGraphicsItem *> draw_points;
-    for (const auto &p : draw_points)
+    static std::vector<QGraphicsItem*> draw_points;
+    for (const auto& p : draw_points)
     {
         scene->removeItem(p);
         delete p;
@@ -367,10 +386,10 @@ void SpecificWorker::draw_person_in_lidar(float person_angle, float distance, QG
     // Add text label with distance and angle
     double angle_deg = person_angle * (180.0 / M_PI);
     QString labelText = QString("Target Person\nDist: %1mm\nAng: %2°")
-                            .arg(distance, 0, 'f', 2)
-                            .arg(angle_deg, 0, 'f', 1);
+                        .arg(distance, 0, 'f', 2)
+                        .arg(angle_deg, 0, 'f', 1);
 
-    static QGraphicsTextItem *m_personLabel = nullptr; // Persistent label across calls
+    static QGraphicsTextItem* m_personLabel = nullptr; // Persistent label across calls
     // Create or Update the Label
     if (m_personLabel == nullptr)
     {
@@ -403,7 +422,7 @@ void SpecificWorker::draw_person_in_lidar(float person_angle, float distance, QG
     m_personLabel->setZValue(100);
 }
 
-std::tuple<float, float> SpecificWorker::navigation(const RoboCompLidar3D::TPoints &points)
+std::tuple<float, float> SpecificWorker::navigation(const RoboCompLidar3D::TPoints& points)
 {
     float minDistance = 400.f;
     static float rot = 0.f;
@@ -412,48 +431,48 @@ std::tuple<float, float> SpecificWorker::navigation(const RoboCompLidar3D::TPoin
     switch (state)
     {
     case RobotState::Rotate:
-    {
-        auto myPoints = cono(points, -(M_PI / 4), (M_PI / 4), 700);
-        if (myPoints.empty())
         {
-            state = RobotState::Advance;
-            return std::make_tuple(adv, 0);
-        }
-
-        std::cout << "Rotate worker" << std::endl;
-        return std::make_tuple(0, rot);
-    }
-    case RobotState::Advance:
-    {
-        auto myPoints = cono(points, -(M_PI / 4), (M_PI / 4), 700);
-        if (!myPoints.empty())
-        {
-            auto min = myPoints.front();
-            if (min.phi < 0.f)
+            auto myPoints = cono(points, -(M_PI / 4), (M_PI / 4), 700);
+            if (myPoints.empty())
             {
-                rot = -1.f;
-            }
-            else
-            {
-                rot = 1.f;
+                state = RobotState::Advance;
+                return std::make_tuple(adv, 0);
             }
 
-            state = RobotState::Rotate;
+            std::cout << "Rotate worker" << std::endl;
             return std::make_tuple(0, rot);
         }
+    case RobotState::Advance:
+        {
+            auto myPoints = cono(points, -(M_PI / 4), (M_PI / 4), 700);
+            if (!myPoints.empty())
+            {
+                auto min = myPoints.front();
+                if (min.phi < 0.f)
+                {
+                    rot = -1.f;
+                }
+                else
+                {
+                    rot = 1.f;
+                }
 
-        std::cout << "Advance worker" << std::endl;
-        return std::make_tuple(adv, 0);
-    }
+                state = RobotState::Rotate;
+                return std::make_tuple(0, rot);
+            }
+
+            std::cout << "Advance worker" << std::endl;
+            return std::make_tuple(adv, 0);
+        }
     }
 
     return std::make_tuple(0, 0);
 }
 
-void SpecificWorker::draw_lidar(const auto &points, QGraphicsScene *scene)
+void SpecificWorker::draw_lidar(const auto& points, QGraphicsScene* scene)
 {
-    static std::vector<QGraphicsItem *> draw_points;
-    for (const auto &p : draw_points)
+    static std::vector<QGraphicsItem*> draw_points;
+    for (const auto& p : draw_points)
     {
         scene->removeItem(p);
         delete p;
@@ -463,7 +482,7 @@ void SpecificWorker::draw_lidar(const auto &points, QGraphicsScene *scene)
     const QColor color("LightGreen");
     const QPen pen(color, 10);
     // const QBrush brush(color, Qt::SolidPattern);
-    for (const auto &p : points)
+    for (const auto& p : points)
     {
         const auto dp = scene->addRect(-25, -25, 50, 50, pen);
         dp->setPos(p.x, p.y);

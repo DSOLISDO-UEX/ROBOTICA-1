@@ -121,7 +121,7 @@ private:
     RobotState state = RobotState::Advance;
 
     // utils
-    auto cono(const RoboCompLidar3D::TPoints &points, float minAngle,
+    RoboCompLidar3D::TPoints cono(const RoboCompLidar3D::TPoints &points, float minAngle,
               float maxAngle, float distance = 0);
 
     void draw_person_in_lidar(float person_angle, float distance, QGraphicsScene *scene);
@@ -137,7 +137,7 @@ private:
         const RoboCompCamera360RGB::TImage &image,
         const QRect &roi,
         double azimuth_sign = 1,
-        double azimuth_offset = 1);
+        double azimuth_offset = -0.1f);
 
 signals:
     // void customSignal();
