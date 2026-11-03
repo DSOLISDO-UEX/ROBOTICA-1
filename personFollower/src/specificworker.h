@@ -18,8 +18,8 @@
  */
 
 /**
-	\brief
-	@author authorname
+    \brief
+    @author authorname
 */
 
 #ifndef SPECIFICWORKER_H
@@ -34,7 +34,7 @@
 
 #include <algorithm>
 #include <execution>
-#include<cppitertools/enumerate.hpp>
+#include <cppitertools/enumerate.hpp>
 #include <genericworker.h>
 #include <abstract_graphic_viewer/abstract_graphic_viewer.h>
 #include <format>
@@ -61,15 +61,15 @@ public:
      * \param tprx Tuple of proxies required for the component.
      * \param startup_check Indicates whether to perform startup checks.
      */
-    SpecificWorker(const ConfigLoader& configLoader, TuplePrx tprx, bool startup_check);
+    SpecificWorker(const ConfigLoader &configLoader, TuplePrx tprx, bool startup_check);
 
     /**
      * \brief Destructor for SpecificWorker.
      */
     ~SpecificWorker();
 
-    void draw_image(const RoboCompCamera360RGB::TImage& raw, const QRect& roi,
-                    const std::vector<QPointF>& projected_points, QLabel* label);
+    void draw_image(const RoboCompCamera360RGB::TImage &raw, const QRect &roi,
+                    const std::vector<QPointF> &projected_points, QLabel *label);
 
 public slots:
     /**
@@ -100,12 +100,14 @@ public slots:
 
     void new_target_slot(QPointF);
 
+    void stopRobot();
+
     /**
      *
      * \brief Checks the given point cloud to see if the robot would collide in any of its directions.
      * @return A tuple with 2 floats with the new speed (x, z) and the rotation needed.
      */
-    std::tuple<float, float> navigation(const RoboCompLidar3D::TPoints& points);
+    std::tuple<float, float> navigation(const RoboCompLidar3D::TPoints &points);
 
 private:
     /**
@@ -113,27 +115,27 @@ private:
      */
     bool startup_check_flag;
     QRectF dimensions;
-    AbstractGraphicViewer* viewer;
+    AbstractGraphicViewer *viewer;
     const int ROBOT_LENGTH = 400;
-    QGraphicsItem* robot_polygon;
+    QGraphicsItem *robot_polygon;
     RobotState state = RobotState::Advance;
 
     // utils
-    auto cono(const RoboCompLidar3D::TPoints& points, float minAngle,
+    auto cono(const RoboCompLidar3D::TPoints &points, float minAngle,
               float maxAngle, float distance = 0);
 
-    void draw_person_in_lidar(float person_angle, float distance, QGraphicsScene* scene);
+    void draw_person_in_lidar(float person_angle, float distance, QGraphicsScene *scene);
 
-    void draw_lidar(const auto& points, QGraphicsScene* scene);
+    void draw_lidar(const auto &points, QGraphicsScene *scene);
 
-    RoboCompLidar3D::TPoints filter_isolated_points(const RoboCompLidar3D::TPoints& points, float d); // set to 200mm
+    RoboCompLidar3D::TPoints filter_isolated_points(const RoboCompLidar3D::TPoints &points, float d); // set to 200mm
 
     std::optional<std::tuple<std::vector<QPointF>, float>> project_lidar_to_camera(
-        const RoboCompLidar3D::TPoints& points,
-        const Eigen::Isometry3d& cam_transform,
+        const RoboCompLidar3D::TPoints &points,
+        const Eigen::Isometry3d &cam_transform,
         double personAngle,
-        const RoboCompCamera360RGB::TImage& image,
-        const QRect& roi,
+        const RoboCompCamera360RGB::TImage &image,
+        const QRect &roi,
         double azimuth_sign = 1,
         double azimuth_offset = 1);
 
