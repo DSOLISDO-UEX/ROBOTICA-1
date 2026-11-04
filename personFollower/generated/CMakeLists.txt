@@ -38,6 +38,8 @@ SET (SOURCES
   $ENV{ROBOCOMP}/classes/ConfigLoader/ConfigLoader.cpp
   main.cpp
   genericworker.cpp
+        ../src/person_tracker.cpp
+        ../src/person_tracker.h
 )
 
 

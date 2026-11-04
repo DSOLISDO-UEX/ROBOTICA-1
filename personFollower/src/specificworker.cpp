@@ -1,24 +1,35 @@
 /*
--    Copyright (C) 2026 by YOUR NAME HERE
+ *    Copyright (C) 2026 by YOUR NAME HERE
  *
--    This file is part of RoboComp
+ *    This file is part of RoboComp
  *
--    RoboComp is free software: you can redistribute it and/or modify
--    it under the terms of the GNU General Public License as published by
--    the Free Software Foundation, either version 3 of the License, or
--    (at your option) any later version.
+ *    RoboComp is free software: you can redistribute it and/or modify
+ *    it under the terms of the GNU General Public License as published by
+ *    the Free Software Foundation, either version 3 of the License, or
+ *    (at your option) any later version.
  *
--    RoboComp is distributed in the hope that it will be useful,
--    but WITHOUT ANY WARRANTY; without even the implied warranty of
--    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
--    GNU General Public License for more details.
+ *    RoboComp is distributed in the hope that it will be useful,
+ *    but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *    GNU General Public License for more details.
  *
--    You should have received a copy of the GNU General Public License
--    along with RoboComp.  If not, see <http://www.gnu.org/licenses/>.
+ *    You should have received a copy of the GNU General Public License
+ *    along with RoboComp.  If not, see <http://www.gnu.org/licenses/>.
  */
 #include "specificworker.h"
 #include <cmath>
 #include <iostream>
+#include <chrono>
+#include <algorithm>
+
+namespace
+{
+    double get_time_sec()
+    {
+        using namespace std::chrono;
+        return duration<double>(steady_clock::now().time_since_epoch()).count();
+    }
+}
 
 SpecificWorker::SpecificWorker(const ConfigLoader& configLoader, TuplePrx tprx, bool startup_check) : GenericWorker(
     configLoader, tprx)
@@ -70,6 +81,13 @@ void SpecificWorker::compute()
 {
     fps.print("Compute worker", 3000);
 
+    const double t_now = get_time_sec();
+    const double dt_ego = (t_last_cycle < 0.0) ? 0.0 : std::clamp(t_now - t_last_cycle, 0.0, 0.5);
+    t_last_cycle = t_now;
+
+    // 1. Ego-motion compensation before prediction/update
+    tracker.ego_compensate(last_adv_cmd, last_rot_cmd, dt_ego);
+
     RoboCompLidar3D::TData ldata;
     try
     {
@@ -94,13 +112,6 @@ void SpecificWorker::compute()
         return;
     }
 
-    // Stop and exit immediately if no person is detected
-    if (objects.objects.empty())
-    {
-        stopRobot();
-        return;
-    }
-
     RoboCompCamera360RGB::TImage img;
     try
     {
@@ -119,99 +130,92 @@ void SpecificWorker::compute()
         return;
     }
 
-    const auto& person = objects.objects.front();
-    QRect roi = {person.left, person.top, person.right - person.left, person.bot - person.top};
+    bool has_valid_measurement = false;
+    double raw_angle = 0.0;
+    float raw_depth = 0.0f;
+    QRect roi;
+    std::vector<QPointF> prjPoints;
 
-    const double boxCenter = (person.left + person.right) / 2.0;
-    double personAngle = (2.0 * M_PI / img.width) * (boxCenter - img.width / 2.0);
-
-    Eigen::Isometry3d camTransform = Eigen::Isometry3d::Identity();
-    camTransform.pretranslate(-Eigen::Vector3d(0.f, -170.f, 1275.f));
-
-    std::tuple<std::vector<QPointF>, float> res;
-    if (const auto res_ = project_lidar_to_camera(ldata.points, camTransform, personAngle, img, roi); not res_.
-        has_value())
+    if (!objects.objects.empty())
     {
-        qWarning() << "No lidar projection";
+        const auto& person = objects.objects.front();
+        roi = QRect(person.left, person.top, person.right - person.left, person.bot - person.top);
+
+        const double boxCenter = (person.left + person.right) / 2.0;
+        raw_angle = (2.0 * M_PI / img.width) * (boxCenter - img.width / 2.0);
+
+        Eigen::Isometry3d camTransform = Eigen::Isometry3d::Identity();
+        camTransform.pretranslate(-Eigen::Vector3d(0.f, -170.f, 1275.f));
+
+        if (const auto res_ = project_lidar_to_camera(ldata.points, camTransform, raw_angle, img, roi); res_.has_value())
+        {
+            std::tie(prjPoints, raw_depth) = res_.value();
+            has_valid_measurement = true;
+        }
+        else
+        {
+            qWarning() << "No lidar projection";
+        }
+    }
+
+    // 2. Kalman Filter Predict & Update
+    if (has_valid_measurement)
+    {
+        tracker.process_measurement(raw_angle, static_cast<double>(raw_depth), t_now);
+    }
+    else if (!tracker.step_without_measurement(dt_ego, t_now))
+    {
+        stopRobot();
         return;
     }
-    else res = res_.value();
-    const auto& [prjPoints, depth] = res;
 
+    const auto [est_angle, est_depth] = tracker.get_polar_estimate();
 
-    draw_image(img, roi, {}, label);
-    draw_person_in_lidar(static_cast<float>(personAngle), depth, &viewer->scene);
+    draw_image(img, roi, prjPoints, label);
+    draw_person_in_lidar(static_cast<float>(est_angle), static_cast<float>(est_depth), &viewer->scene);
     draw_lidar(ldata.points, &viewer->scene);
 
-    // P-Controller
-    constexpr float TARGET_DIST_MM = 300.0f; // Target following distance: 1.2 m
-    constexpr float MAX_ADV_SPEED = 1200.0f; // Max linear speed (mm/s)
-    constexpr float MAX_ROT_SPEED = 2.f; // Max angular speed (rad/s)
-    constexpr float KP_DIST = 0.5f; // Linear P gain
-    constexpr float KP_ROT = 1.2f; // Angular P gain
+    // 3. Controller using Kalman state (position + velocity feed-forward for 1000 mm tracking)
+    constexpr float TARGET_DIST_MM = 1000.0f; // Target following distance: 1.0 m
+    constexpr float MAX_ADV_SPEED = 1200.0f;  // Max linear speed (mm/s)
+    constexpr float MAX_ROT_SPEED = 2.0f;     // Max angular speed (rad/s)
+    constexpr float KP_DIST = 1.0f;           // Linear P gain
+    constexpr float KP_ROT = 1.5f;            // Angular P gain
+    constexpr float KD_VEL = 0.85f;           // Velocity feed-forward gain
 
-    float dist_error = depth - TARGET_DIST_MM;
+    float dist_error = static_cast<float>(est_depth) - TARGET_DIST_MM;
+    double control_angle = est_angle;
+    const double radial_vel = tracker.get_radial_velocity();
 
-    // Deadbands to avoid jitter around target
-    if (std::abs(dist_error) < 100.0f)
+    // Small deadbands to avoid jitter at steady state
+    if (std::abs(dist_error) < 10.0f && std::abs(radial_vel) < 30.0)
         dist_error = 0.0f;
-    if (std::abs(personAngle) < 0.05)
-        personAngle = 0.0;
+    if (std::abs(control_angle) < 0.02)
+        control_angle = 0.0;
 
-    float adv_speed = std::clamp(dist_error * KP_DIST, -MAX_ADV_SPEED, MAX_ADV_SPEED);
-    float rot_speed = std::clamp(static_cast<float>(-personAngle * KP_ROT), -MAX_ROT_SPEED, MAX_ROT_SPEED);
+    // Slow down linear advance if the target is far off-center
+    const float alignment_factor = std::max(0.0f, static_cast<float>(std::cos(control_angle)));
+
+    float adv_speed = (dist_error * KP_DIST + static_cast<float>(radial_vel) * KD_VEL) * alignment_factor;
+    adv_speed = std::clamp(adv_speed, -MAX_ADV_SPEED, MAX_ADV_SPEED);
+
+    float rot_speed = std::clamp(static_cast<float>(-control_angle * KP_ROT), -MAX_ROT_SPEED, MAX_ROT_SPEED);
 
     omnirobot_proxy->setSpeedBase(0.0f, adv_speed, rot_speed);
+    last_adv_cmd = adv_speed;
+    last_rot_cmd = rot_speed;
 }
 
 void SpecificWorker::stopRobot()
 {
     omnirobot_proxy->setSpeedBase(0.0f, 0.f, 0.f);
+    last_adv_cmd = 0.0f;
+    last_rot_cmd = 0.0f;
 }
 
 void SpecificWorker::new_target_slot(QPointF p)
 {
     qInfo() << p;
-}
-
-RoboCompLidar3D::TPoints SpecificWorker::filter_isolated_points(const RoboCompLidar3D::TPoints& points, float d)
-// set to 200mm
-{
-    if (points.empty())
-        return {};
-
-    const float d_squared = d * d; // Avoid sqrt by comparing squared distances
-    std::vector<bool> hasNeighbor(points.size(), false);
-
-    // Create index vector for parallel iteration
-    std::vector<size_t> indices(points.size());
-    std::iota(indices.begin(), indices.end(), size_t{0});
-
-    // Parallelize outer loop - each thread checks one point
-    std::for_each(std::execution::par, indices.begin(), indices.end(), [&](size_t i)
-    {
-        const auto& p1 = points[i];
-        // Sequential inner loop (avoid nested parallelism)
-        for (auto&& [j,p2] : iter::enumerate(points))
-        {
-            if (i == j) continue;
-            const float dx = p1.x - p2.x;
-            const float dy = p1.y - p2.y;
-            if (dx * dx + dy * dy <= d_squared)
-            {
-                hasNeighbor[i] = true;
-                break;
-            }
-        }
-    });
-
-    // Collect results
-    std::vector<RoboCompLidar3D::TPoint> result;
-    result.reserve(points.size());
-    for (auto&& [i, p] : iter::enumerate(points))
-        if (hasNeighbor[i])
-            result.push_back(points[i]);
-    return result;
 }
 
 RoboCompLidar3D::TPoints SpecificWorker::cono(const RoboCompLidar3D::TPoints& points, float minAngle, float maxAngle,
@@ -223,11 +227,9 @@ RoboCompLidar3D::TPoints SpecificWorker::cono(const RoboCompLidar3D::TPoints& po
         return point.phi >= minAngle && point.phi <= maxAngle && point.distance2d > distance;
     });
 
-
     // Materialize view to vector to match return type RoboCompLidar3D::TPoints
     return std::ranges::to<RoboCompLidar3D::TPoints>(filtered);
 }
-
 
 std::optional<std::tuple<std::vector<QPointF>, float>>
 SpecificWorker::project_lidar_to_camera(
@@ -245,12 +247,11 @@ SpecificWorker::project_lidar_to_camera(
     {
         qWarning() << "Empty cone";
         return {};
-    };
+    }
 
     std::vector<QPointF> projected_points;
     projected_points.reserve(points.size());
     std::vector<float> distances;
-
 
     for (const auto& lp : filtered_cone)
     {
@@ -258,9 +259,7 @@ SpecificWorker::project_lidar_to_camera(
         Eigen::Vector3d p_lidar(lp.x, lp.y, lp.z);
 
         // Transform point to Camera Local Frame
-        // P_cam = R_inv * (P_lidar - t)
         Eigen::Vector3d p_cam = cam_transform * p_lidar;
-
 
         // Equirectangular Projection
         const double r = p_cam.norm();
@@ -270,13 +269,10 @@ SpecificWorker::project_lidar_to_camera(
             continue;
         }
 
-
         // Azimuth (u)
-        double u = ((azimuth_sign * std::atan2(p_cam.x(), p_cam.y()) + azimuth_offset) / (2.0 * M_PI) + 0.5) * image.
-            width;
+        double u = ((azimuth_sign * std::atan2(p_cam.x(), p_cam.y()) + azimuth_offset) / (2.0 * M_PI) + 0.5) * image.width;
         u = std::fmod(u, static_cast<double>(image.width));
         if (u < 0.0) u += image.width;
-
 
         // Elevation (v)
         const double v = (std::asin(-p_cam.z() / r) / M_PI + 0.5) * image.height;
@@ -288,15 +284,13 @@ SpecificWorker::project_lidar_to_camera(
             distances.push_back(r);
         }
     }
-    
+
     // compute the minimal depth of the projected points within the bounding box
     if (distances.empty()) return {};
     float measured_depth = *std::ranges::min_element(distances);
 
-
     return std::make_tuple(projected_points, measured_depth);
 }
-
 
 void SpecificWorker::draw_image(const RoboCompCamera360RGB::TImage& raw, const QRect& roi,
                                 const std::vector<QPointF>& projected_points, QLabel* label)
@@ -325,7 +319,8 @@ void SpecificWorker::draw_image(const RoboCompCamera360RGB::TImage& raw, const Q
 
     painter.scale(sx, sy);
 
-    painter.drawRect(roi);
+    if (!roi.isNull())
+        painter.drawRect(roi);
 
     // Draw projected points
     pen.setColor(Qt::blue);
@@ -342,18 +337,21 @@ void SpecificWorker::draw_image(const RoboCompCamera360RGB::TImage& raw, const Q
     painter.setPen(pen);
     painter.drawLine(QPointF(image_mid_x, 0.0), QPointF(image_mid_x, raw.height));
 
-    // Draw a horizontal line from the closest ROI side to the vertical guide
-    const double roi_mid_y = roi.top() + roi.height() / 2.0;
-    const double roi_left_dist = std::abs(roi.left() - image_mid_x);
-    const double roi_right_dist = std::abs(roi.right() - image_mid_x);
-    const double roi_closest_x = (roi_left_dist <= roi_right_dist) ? roi.left() : roi.right();
-    const double roi_guide_length = std::abs(image_mid_x - roi_closest_x);
-    const int horizontal_guide_thickness = std::clamp<int>(static_cast<int>(roi_guide_length / 8.0), 2, 25);
-    pen.setColor(QColor(255, 140, 0));
-    pen.setWidth(horizontal_guide_thickness);
-    pen.setCosmetic(false);
-    painter.setPen(pen);
-    painter.drawLine(QPointF(roi_closest_x, roi_mid_y), QPointF(image_mid_x, roi_mid_y));
+    if (!roi.isNull())
+    {
+        // Draw a horizontal line from the closest ROI side to the vertical guide
+        const double roi_mid_y = roi.top() + roi.height() / 2.0;
+        const double roi_left_dist = std::abs(roi.left() - image_mid_x);
+        const double roi_right_dist = std::abs(roi.right() - image_mid_x);
+        const double roi_closest_x = (roi_left_dist <= roi_right_dist) ? roi.left() : roi.right();
+        const double roi_guide_length = std::abs(image_mid_x - roi_closest_x);
+        const int horizontal_guide_thickness = std::clamp<int>(static_cast<int>(roi_guide_length / 8.0), 2, 25);
+        pen.setColor(QColor(255, 140, 0));
+        pen.setWidth(horizontal_guide_thickness);
+        pen.setCosmetic(false);
+        painter.setPen(pen);
+        painter.drawLine(QPointF(roi_closest_x, roi_mid_y), QPointF(image_mid_x, roi_mid_y));
+    }
 
     label->setPixmap(QPixmap::fromImage(resized));
 }
@@ -372,101 +370,39 @@ void SpecificWorker::draw_person_in_lidar(float person_angle, float distance, QG
     const QPen pen(color, 50);
 
     auto circ = scene->addEllipse(-100, -100, 200, 200, pen);
-    // compute center from angle and dist
-    auto cx = distance * sin(person_angle + 0.1);
+    auto cx = distance * sin(person_angle);
     auto cy = distance * cos(person_angle);
     QPointF center{cx, cy};
     circ->setPos(center);
     draw_points.push_back(circ);
 
     auto line = scene->addLine(0, 0, center.x(), center.y(), pen);
-    line->setZValue(-1); // Ensure the line is behind the person polygon
+    line->setZValue(-1);
     draw_points.push_back(line);
 
-    // Add text label with distance and angle
     double angle_deg = person_angle * (180.0 / M_PI);
     QString labelText = QString("Target Person\nDist: %1mm\nAng: %2°")
                         .arg(distance, 0, 'f', 2)
                         .arg(angle_deg, 0, 'f', 1);
 
-    static QGraphicsTextItem* m_personLabel = nullptr; // Persistent label across calls
-    // Create or Update the Label
+    static QGraphicsTextItem* m_personLabel = nullptr;
     if (m_personLabel == nullptr)
     {
-        // Create the item once and add it to the scene
         m_personLabel = scene->addText(labelText);
-
-        // --- FIX FOR FLIPPED Y-AXIS ---
-        // This cancels out the scene's scale(1, -1) transform
         m_personLabel->setTransform(QTransform().scale(1, -1));
-        // -----------------------------
 
-        // Set a visible style
         QFont font = m_personLabel->font();
         font.setPixelSize(100);
-        // font.setBold(true);
         m_personLabel->setFont(font);
         m_personLabel->setDefaultTextColor(Qt::blue);
-
-        // Add a background box for readability (optional but recommended)
-        // Since QGraphicsTextItem doesn't have a background, we wrap it in a GraphicsItem
-        // or just set a semi-transparent background via a separate rectangle if needed.
     }
-    else // Update existing item's text
-        m_personLabel->setPlainText(labelText);
-
-    // Update Position (slightly offset from the point)
-    m_personLabel->setPos(center.x() + 10, center.y() - 10);
-
-    // Ensure the label is always on top of other Lidar points
-    m_personLabel->setZValue(100);
-}
-
-std::tuple<float, float> SpecificWorker::navigation(const RoboCompLidar3D::TPoints& points)
-{
-    float minDistance = 400.f;
-    static float rot = 0.f;
-    float adv = 500;
-
-    switch (state)
+    else
     {
-    case RobotState::Rotate:
-        {
-            auto myPoints = cono(points, -(M_PI / 4), (M_PI / 4), 700);
-            if (myPoints.empty())
-            {
-                state = RobotState::Advance;
-                return std::make_tuple(adv, 0);
-            }
-
-            std::cout << "Rotate worker" << std::endl;
-            return std::make_tuple(0, rot);
-        }
-    case RobotState::Advance:
-        {
-            auto myPoints = cono(points, -(M_PI / 4), (M_PI / 4), 700);
-            if (!myPoints.empty())
-            {
-                auto min = myPoints.front();
-                if (min.phi < 0.f)
-                {
-                    rot = -1.f;
-                }
-                else
-                {
-                    rot = 1.f;
-                }
-
-                state = RobotState::Rotate;
-                return std::make_tuple(0, rot);
-            }
-
-            std::cout << "Advance worker" << std::endl;
-            return std::make_tuple(adv, 0);
-        }
+        m_personLabel->setPlainText(labelText);
     }
 
-    return std::make_tuple(0, 0);
+    m_personLabel->setPos(center.x() + 10, center.y() - 10);
+    m_personLabel->setZValue(100);
 }
 
 void SpecificWorker::draw_lidar(const auto& points, QGraphicsScene* scene)
@@ -481,12 +417,11 @@ void SpecificWorker::draw_lidar(const auto& points, QGraphicsScene* scene)
 
     const QColor color("LightGreen");
     const QPen pen(color, 10);
-    // const QBrush brush(color, Qt::SolidPattern);
     for (const auto& p : points)
     {
         const auto dp = scene->addRect(-25, -25, 50, 50, pen);
         dp->setPos(p.x, p.y);
-        draw_points.push_back(dp); // add to the list of points to be deleted next time
+        draw_points.push_back(dp);
     }
 }
 

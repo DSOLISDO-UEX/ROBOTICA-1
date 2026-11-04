@@ -40,6 +40,7 @@
 #include <format>
 #include <print>
 #include <Eigen/Dense>
+#include "person_tracker.h"
 
 enum class RobotState : uint8_t
 {
@@ -102,12 +103,6 @@ public slots:
 
     void stopRobot();
 
-    /**
-     *
-     * \brief Checks the given point cloud to see if the robot would collide in any of its directions.
-     * @return A tuple with 2 floats with the new speed (x, z) and the rotation needed.
-     */
-    std::tuple<float, float> navigation(const RoboCompLidar3D::TPoints &points);
 
 private:
     /**
@@ -119,6 +114,10 @@ private:
     const int ROBOT_LENGTH = 400;
     QGraphicsItem *robot_polygon;
     RobotState state = RobotState::Advance;
+    PersonTracker tracker;
+    double t_last_cycle = -1.0;
+    float last_adv_cmd = 0.0f;
+    float last_rot_cmd = 0.0f;
 
     // utils
     RoboCompLidar3D::TPoints cono(const RoboCompLidar3D::TPoints &points, float minAngle,
