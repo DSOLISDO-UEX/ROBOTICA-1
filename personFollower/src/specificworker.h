@@ -1,31 +1,6 @@
-/*
- *    Copyright (C) 2026 by YOUR NAME HERE
- *
- *    This file is part of RoboComp
- *
- *    RoboComp is free software: you can redistribute it and/or modify
- *    it under the terms of the GNU General Public License as published by
- *    the Free Software Foundation, either version 3 of the License, or
- *    (at your option) any later version.
- *
- *    RoboComp is distributed in the hope that it will be useful,
- *    but WITHOUT ANY WARRANTY; without even the implied warranty of
- *    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *    GNU General Public License for more details.
- *
- *    You should have received a copy of the GNU General Public License
- *    along with RoboComp.  If not, see <http://www.gnu.org/licenses/>.
- */
-
-/**
-    \brief
-    @author authorname
-*/
-
 #ifndef SPECIFICWORKER_H
 #define SPECIFICWORKER_H
 
-// If you want to reduce the period automatically due to lack of use, you must uncomment the following line
 // #define HIBERNATION_ENABLED
 
 #ifdef emit
@@ -33,23 +8,16 @@
 #endif
 
 #include <algorithm>
-#include <execution>
-#include <cppitertools/enumerate.hpp>
+#include <optional>
+#include <tuple>
+#include <vector>
 #include <genericworker.h>
 #include <abstract_graphic_viewer/abstract_graphic_viewer.h>
-#include <format>
-#include <print>
 #include <Eigen/Dense>
-#include "person_tracker.h"
-
-enum class RobotState : uint8_t
-{
-    Advance = 0,
-    Rotate
-};
+#include "personTracker.h"
 
 /**
- * \brief Class SpecificWorker implements the core functionality of the component.
+ * @brief Componente principal para la detección, estimación de estado y seguimiento de una persona.
  */
 class SpecificWorker : public GenericWorker
 {
@@ -57,89 +25,115 @@ class SpecificWorker : public GenericWorker
 
 public:
     /**
-     * \brief Constructor for SpecificWorker.
-     * \param configLoader Configuration loader for the component.
-     * \param tprx Tuple of proxies required for the component.
-     * \param startup_check Indicates whether to perform startup checks.
+     * @brief Constructor de SpecificWorker.
+     * @param configLoader Cargador de configuración del componente.
+     * @param tprx Tupla de proxies de comunicaciones de RoboComp.
+     * @param startupCheck Indica si se ejecuta en modo de comprobación inicial.
      */
-    SpecificWorker(const ConfigLoader &configLoader, TuplePrx tprx, bool startup_check);
+    SpecificWorker(const ConfigLoader& configLoader, TuplePrx tprx, bool startupCheck);
 
     /**
-     * \brief Destructor for SpecificWorker.
+     * @brief Destructor de SpecificWorker.
      */
-    ~SpecificWorker();
-
-    void draw_image(const RoboCompCamera360RGB::TImage &raw, const QRect &roi,
-                    const std::vector<QPointF> &projected_points, QLabel *label);
+    ~SpecificWorker() override;
 
 public slots:
     /**
-     * \brief Initializes the worker one time.
+     * @brief Inicializa el visor gráfico y la geometría del robot.
      */
-    void initialize();
+    void initialize() override;
 
     /**
-     * \brief Main compute loop of the worker.
+     * @brief Ciclo principal: compensa egomoción, fusiona LiDAR/cámara, actualiza Kalman y comanda velocidades.
      */
-    void compute();
+    void compute() override;
 
     /**
-     * \brief Handles the emergency state loop.
+     * @brief Gestiona el estado de emergencia del componente.
      */
-    void emergency();
+    void emergency() override;
 
     /**
-     * \brief Restores the component from an emergency state.
+     * @brief Restaura el componente tras un estado de emergencia.
      */
-    void restore();
+    void restore() override;
 
     /**
-     * \brief Performs startup checks for the component.
-     * \return An integer representing the result of the checks.
+     * @brief Realiza la comprobación de arranque del componente.
+     * @return Código de retorno del chequeo.
      */
     int startup_check();
 
-    void new_target_slot(QPointF);
-
-    void stopRobot();
-
-
 private:
+    bool startupCheckFlag_ = false;
+    QRectF dimensions_;
+    AbstractGraphicViewer* viewer_ = nullptr;
+    QGraphicsItem* robotPolygon_ = nullptr;
+    PersonTracker tracker_;
+    double timeLastCycle_ = -1.0;
+    float lastAdvCmd_ = 0.0f;
+    float lastRotCmd_ = 0.0f;
+
     /**
-     * \brief Flag indicating whether startup checks are enabled.
+     * @brief Detiene la base omnidireccional y pone a cero los registros de comandos previos.
      */
-    bool startup_check_flag;
-    QRectF dimensions;
-    AbstractGraphicViewer *viewer;
-    const int ROBOT_LENGTH = 400;
-    QGraphicsItem *robot_polygon;
-    RobotState state = RobotState::Advance;
-    PersonTracker tracker;
-    double t_last_cycle = -1.0;
-    float last_adv_cmd = 0.0f;
-    float last_rot_cmd = 0.0f;
+    void StopRobot();
 
-    // utils
-    RoboCompLidar3D::TPoints cono(const RoboCompLidar3D::TPoints &points, float minAngle,
-              float maxAngle, float distance = 0);
+    /**
+     * @brief Filtra los puntos 3D del LiDAR dentro de un sector angular y por encima de una distancia mínima.
+     * @param points Nube de puntos de entrada.
+     * @param minAngle Ángulo mínimo del cono (rad).
+     * @param maxAngle Ángulo máximo del cono (rad).
+     * @param minDistance Distancia mínima 2D permitida (mm).
+     * @return Puntos filtrados dentro del cono.
+     */
+    RoboCompLidar3D::TPoints FilterCone(const RoboCompLidar3D::TPoints& points, float minAngle,
+                                        float maxAngle, float minDistance = 0.0f);
 
-    void draw_person_in_lidar(float person_angle, float distance, QGraphicsScene *scene);
-
-    void draw_lidar(const auto &points, QGraphicsScene *scene);
-
-    RoboCompLidar3D::TPoints filter_isolated_points(const RoboCompLidar3D::TPoints &points, float d); // set to 200mm
-
-    std::optional<std::tuple<std::vector<QPointF>, float>> project_lidar_to_camera(
-        const RoboCompLidar3D::TPoints &points,
-        const Eigen::Isometry3d &cam_transform,
+    /**
+     * @brief Proyecta puntos LiDAR sobre la imagen equirectangular 360 y calcula la profundidad mínima en la ROI.
+     * @param points Nube de puntos del LiDAR.
+     * @param camTransform Transformación rígida del marco del LiDAR al marco de la cámara.
+     * @param personAngle Ángulo estimado hacia la persona en la imagen (rad).
+     * @param image Imagen 360 RGB actual.
+     * @param roi Bounding box 2D de la persona detectada.
+     * @param azimuthSign Signo de orientación acimutal.
+     * @param azimuthOffset Desfase angular acimutal (rad).
+     * @return Tupla opcional con los puntos proyectados en la ROI y la profundidad mínima (mm).
+     */
+    std::optional<std::tuple<std::vector<QPointF>, float>> ProjectLidarToCamera(
+        const RoboCompLidar3D::TPoints& points,
+        const Eigen::Isometry3d& camTransform,
         double personAngle,
-        const RoboCompCamera360RGB::TImage &image,
-        const QRect &roi,
-        double azimuth_sign = 1,
-        double azimuth_offset = -0.1f);
+        const RoboCompCamera360RGB::TImage& image,
+        const QRect& roi,
+        double azimuthSign,
+        double azimuthOffset);
 
-signals:
-    // void customSignal();
+    /**
+     * @brief Renderiza la imagen 360 con la ROI, las guías de centrado y las proyecciones del LiDAR.
+     * @param raw Imagen RGB de entrada.
+     * @param roi Rectángulo delimitador de la persona.
+     * @param projectedPoints Puntos 2D proyectados sobre la imagen.
+     * @param targetLabel Widget QLabel donde mostrar el resultado.
+     */
+    void DrawImage(const RoboCompCamera360RGB::TImage& raw, const QRect& roi,
+                   const std::vector<QPointF>& projectedPoints, QLabel* targetLabel);
+
+    /**
+     * @brief Dibuja la posición y datos estimados de la persona en la escena 2D del visor.
+     * @param personAngle Ángulo estimado de la persona (rad).
+     * @param distance Distancia estimada de la persona (mm).
+     * @param scene Escena gráfica de Qt.
+     */
+    void DrawPersonInLidar(float personAngle, float distance, QGraphicsScene* scene);
+
+    /**
+     * @brief Dibuja los puntos de la nube LiDAR en la escena 2D del visor.
+     * @param points Nube de puntos LiDAR.
+     * @param scene Escena gráfica de Qt.
+     */
+    void DrawLidar(const RoboCompLidar3D::TPoints& points, QGraphicsScene* scene);
 };
 
-#endif
+#endif // SPECIFICWORKER_H
