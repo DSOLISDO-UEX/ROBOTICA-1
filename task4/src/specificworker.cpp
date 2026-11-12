@@ -67,10 +67,11 @@ void SpecificWorker::initialize()
     ctrlParams.maxAdvSpeed = ControlParams::maxAdvSpeed;
     ctrlParams.maxRotSpeed = ControlParams::maxRotSpeed;
     ctrlParams.minAdvSpeed = 0.0f;
-    ctrlParams.robotRadiusMm = 280.0f;
-    ctrlParams.safetyMarginMm = 65.0f;
-    ctrlParams.simTimeSec = 1.2f;
-    ctrlParams.simSteps = 6;
+    ctrlParams.robotRadiusMm = 285.0f;
+    ctrlParams.safetyMarginMm = 45.0f;
+    ctrlParams.simTimeSec = 0.8f;
+    ctrlParams.simSteps = 8;
+    ctrlParams.minSelfChassisDistMm = 340.0f;
     controller_.setParams(ctrlParams);
 }
 

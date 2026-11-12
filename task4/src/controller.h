@@ -21,15 +21,15 @@ public:
         float targetDistMm = 1000.0f;       // Nominal following distance (mm)
         float maxAdvSpeed = 1000.0f;        // Max advance speed (mm/s)
         float minAdvSpeed = 0.0f;           // Min forward advance speed (mm/s)
-        float maxRotSpeed = 1.0f;           // Max rotational speed (rad/s)
-        float robotRadiusMm = 280.0f;       // Robot effective radius (mm)
-        float safetyMarginMm = 65.0f;       // Extra clearance margin (mm)
+        float maxRotSpeed = 1.2f;           // Max rotational speed (rad/s)
+        float robotRadiusMm = 285.0f;       // Robot chassis half-width with wheelpods (284mm)
+        float safetyMarginMm = 45.0f;       // Extra clearance margin (mm) -> collisionThreshold = 330mm
 
         // DWA Simulation Settings
-        float simTimeSec = 1.2f;            // Forward projection horizon (s)
-        int simSteps = 6;                   // Arc discretization steps along trajectory
-        int advSamples = 17;                // Discretization samples for advance speed (0..1000)
-        int rotSamples = 25;                // Discretization samples for rotational speed (-1..1)
+        float simTimeSec = 0.8f;            // Forward projection horizon (s)
+        int simSteps = 8;                   // Arc discretization steps along trajectory
+        int advSamples = 19;                // Discretization samples for advance speed (0..1000)
+        int rotSamples = 25;                // Discretization samples for rotational speed (-1.2..1.2)
 
         // Proportional Controller Baseline
         float kpDist = 0.9f;                // Linear gain
@@ -37,16 +37,17 @@ public:
         float kdVel = 0.85f;                // Radial velocity feedforward gain
 
         // Cost Function Weights
-        float weightTargetDist = 1.2f;      // Term: end of arc at 1m from person
-        float weightHeading = 0.8f;         // Term: end of arc faces the person
-        float weightObstacle = 2.0f;        // Term: distance to obstacles (avoidance priority)
-        float weightSpeed = 0.35f;          // Term: prefer fast movements
-        float weightDistToPerson = 0.5f;    // Term: close distance to person when far
-        float weightPropAlignment = 0.5f;   // Bias towards proportional controller
+        float weightTargetDist = 1.0f;      // Term: end of arc at 1m from person
+        float weightHeading = 0.5f;         // Term: end of arc faces the person (moderate to allow dodging)
+        float weightObstacle = 1.8f;        // Term: distance to obstacles (avoidance priority)
+        float weightSpeed = 1.2f;           // Term: prefer fast movements
+        float weightDistToPerson = 0.8f;    // Term: close distance to person when far
+        float weightPropAlignment = 0.3f;   // Bias towards proportional controller (only in free space)
 
         // Clearance thresholds
-        float obstacleInfluenceDistMm = 1200.0f; // Range where obstacle creates repulsive cost
-        float personBodyRadiusMm = 450.0f;       // Radius around person centroid excluded from obstacles
+        float obstacleInfluenceDistMm = 900.0f; // Range where obstacle creates repulsive cost
+        float personBodyRadiusMm = 450.0f;      // Radius around person centroid excluded from obstacles
+        float minSelfChassisDistMm = 340.0f;    // Self-chassis filter threshold (wheelpods reach ~331mm)
     };
 
     struct Output
@@ -99,6 +100,8 @@ public:
 
 private:
     Params params_;
+    float lastPivotRot_ = 0.0f;  // Hysteresis to prevent left-right oscillation when blocked
+    float lastChosenRot_ = 0.0f; // Turn continuity across consecutive DWA cycles
 
     // Extracts relevant 2D static obstacle points from LiDAR cloud
     std::vector<QPointF> extractObstaclePoints(const RoboCompLidar3D::TPoints& points,

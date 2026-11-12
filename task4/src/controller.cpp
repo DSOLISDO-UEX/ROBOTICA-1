@@ -64,8 +64,9 @@ std::vector<QPointF> Controller::extractObstaclePoints(const RoboCompLidar3D::TP
 
     for (const auto& pt : points)
     {
-        // Descartar retornos sobre el chasis propio del robot (< 220 mm)
-        if (pt.distance2d < 220.0f) continue;
+        // Descartar retornos sobre el chasis y ruedas propias del robot
+        if (pt.distance2d < params_.minSelfChassisDistMm) continue;
+        if (std::abs(pt.x) < 320.0f && std::abs(pt.y) < 300.0f) continue;
         // Descartar obstáculos demasiado lejanos para la planificación reactiva local (> 4000 mm)
         if (pt.distance2d > 4000.0f) continue;
         // Enfocar en el semicírculo frontal y lateral relevante (-400 mm < y < 3500 mm, |x| < 2500 mm)
@@ -190,12 +191,15 @@ Controller::Output Controller::update(double personAngle,
     for (int i = 0; i < params_.advSamples; ++i)
     {
         const float candAdv = params_.minAdvSpeed + i * advStep;
+        // Para giros in-situ (adv == 0), el umbral es el radio físico del robot (285 mm).
+        // Para trayectorias con avance lineal (adv > 0), se incluye el margen de seguridad (320 mm).
+        const float currentThresh = (candAdv < 1.0f) ? params_.robotRadiusMm : collisionThreshold;
         for (int j = 0; j < params_.rotSamples; ++j)
         {
             const float candRot = -params_.maxRotSpeed + j * rotStep;
 
             const auto arc = generateArc(candAdv, candRot, params_.simTimeSec, params_.simSteps);
-            const auto [collision, minObsDist] = evaluateObstacleClearance(arc, obstacles, collisionThreshold);
+            const auto [collision, minObsDist] = evaluateObstacleClearance(arc, obstacles, currentThresh);
 
             if (!collision)
             {
@@ -215,6 +219,28 @@ Controller::Output Controller::update(double personAngle,
     }
 
     // 5. Evaluación de la función de coste para cada candidato no colisionante
+    // Detectar si el corredor frontal inmediato está bloqueado por un obstáculo
+    // (Solo activo cuando el objetivo está en el cono frontal y hay un obstáculo delante)
+    bool forwardBlocked = false;
+    float obsCentroidX = 0.0f;
+    int blockedCount = 0;
+    if (alignmentFactor > 0.0f)
+    {
+        for (const auto& obs : obstacles)
+        {
+            if (obs.y() > 0.0f && obs.y() < 1600.0f && std::abs(obs.x()) < 420.0f)
+            {
+                forwardBlocked = true;
+                obsCentroidX += obs.x();
+                blockedCount++;
+            }
+        }
+        if (blockedCount > 0)
+        {
+            obsCentroidX /= static_cast<float>(blockedCount);
+        }
+    }
+
     float bestCost = std::numeric_limits<float>::max();
     Candidate bestCandidate;
     bool foundCandidate = false;
@@ -236,6 +262,7 @@ Controller::Output Controller::update(double personAngle,
         const double bearingToPerson = std::atan2(-dxToEnd, dyToEnd);
         const double headingDiff = std::abs(std::remainder(endTheta - bearingToPerson, 2.0 * M_PI));
         const float costHeading = static_cast<float>(headingDiff / M_PI);
+        const float weightHeadingEff = forwardBlocked ? 0.2f : params_.weightHeading;
 
         // Term 4: Distancia a los obstáculos (maximizar holgura -> penalizar cercanía)
         float costObstacle = 0.0f;
@@ -252,17 +279,49 @@ Controller::Output Controller::update(double personAngle,
         // Term 6: Progreso general hacia la persona
         const float costDistToPerson = distToEnd / 4000.0f;
 
-        // Term 7: Alineación suave con el controlador proporcional
-        const float costProp = 0.5f * (std::abs(cand.adv - propAdv) / params_.maxAdvSpeed) +
-                               0.5f * (std::abs(cand.rot - propRot) / (2.0f * params_.maxRotSpeed));
+        // Term 7: Alineación suave con el controlador proporcional (desactivado durante evasión frontal)
+        const float costProp = forwardBlocked
+                                   ? 0.0f
+                                   : (0.5f * (std::abs(cand.adv - propAdv) / params_.maxAdvSpeed) +
+                                      0.5f * (std::abs(cand.rot - propRot) / (2.0f * params_.maxRotSpeed)));
+
+        // Term 8: Histéresis de giro para prevenir oscilaciones rápidas izquierda/derecha
+        float costHysteresis = 0.0f;
+        if (std::abs(cand.rot) > 0.1f && std::abs(lastChosenRot_) > 0.1f)
+        {
+            if (cand.rot * lastChosenRot_ < 0.0f)
+            {
+                costHysteresis = 0.6f; // Penalizar cambios bruscos de sentido de giro
+            }
+        }
+
+        // Term 9: Prioridad de evasión jerárquica cuando el frente está bloqueado
+        float costCorridor = 0.0f;
+        if (forwardBlocked)
+        {
+            if (cand.adv < 50.0f || std::abs(cand.rot) < 0.6f)
+            {
+                costCorridor = 4.0f; // Penalizar detenerse o avanzar recto hacia el obstáculo
+            }
+            else if (obsCentroidX <= 0.0f && cand.rot < -0.5f)
+            {
+                costCorridor = -2.0f - 0.5f * std::abs(cand.rot); // Obstáculo a la izquierda -> esquivar por la derecha
+            }
+            else if (obsCentroidX > 0.0f && cand.rot > 0.5f)
+            {
+                costCorridor = -2.0f - 0.5f * std::abs(cand.rot); // Obstáculo a la derecha -> esquivar por la izquierda
+            }
+        }
 
         // Coste total ponderado
         cand.cost = params_.weightTargetDist * costTargetDist +
-                    params_.weightHeading * costHeading +
+                    weightHeadingEff * costHeading +
                     params_.weightObstacle * costObstacle +
                     params_.weightSpeed * costSpeed +
                     params_.weightDistToPerson * costDistToPerson +
-                    params_.weightPropAlignment * costProp;
+                    params_.weightPropAlignment * costProp +
+                    costHysteresis +
+                    costCorridor;
 
         if (cand.cost < bestCost)
         {
@@ -275,6 +334,11 @@ Controller::Output Controller::update(double personAngle,
     // 6. Asignación del comando resultante o fallback jerárquico de seguridad
     if (foundCandidate)
     {
+        if (bestCandidate.adv >= 100.0f)
+        {
+            lastPivotRot_ = 0.0f; // Reiniciar histéresis una vez que el robot avanza fluidamente
+        }
+        lastChosenRot_ = bestCandidate.rot;
         out.advSpeed = bestCandidate.adv;
         out.rotSpeed = bestCandidate.rot;
         out.minObsDist = bestCandidate.minObsDist;
@@ -287,27 +351,13 @@ Controller::Output Controller::update(double personAngle,
     }
     else
     {
-        // En caso de que todos los arcos con avance estén bloqueados:
-        // Prioridad jerárquica: EVITAR COLISIÓN (velocidad lineal cero, rotar sobre sí mismo hacia la zona más despejada)
+        // En caso de que todos los candidatos estén restringidos por cercanía:
+        // Prioridad de seguridad: velocidad lineal cero y rotar in-situ para encarar a la persona
         out.advSpeed = 0.0f;
-
-        // Evaluar giros puros in-situ para despejar el camino
-        float bestClearance = -1.0f;
-        float bestPivotRot = 0.0f;
-        for (float testRot : {-1.0f, -0.6f, -0.3f, 0.3f, 0.6f, 1.0f})
-        {
-            const auto pivotArc = generateArc(0.0, testRot, params_.simTimeSec, 3);
-            const auto [_, clearance] = evaluateObstacleClearance(pivotArc, obstacles, collisionThreshold);
-            if (clearance > bestClearance)
-            {
-                bestClearance = clearance;
-                bestPivotRot = testRot;
-            }
-        }
-
-        out.rotSpeed = bestPivotRot;
+        const double bearingToGoal = std::atan2(-targetPersonX, targetPersonY);
+        out.rotSpeed = (bearingToGoal >= 0.0) ? params_.maxRotSpeed : -params_.maxRotSpeed;
         out.isAvoiding = true;
-        out.minObsDist = bestClearance;
+        out.minObsDist = params_.robotRadiusMm;
         out.bestArc = generateArc(0.0, out.rotSpeed, params_.simTimeSec, params_.simSteps);
     }
 
