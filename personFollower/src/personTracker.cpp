@@ -9,7 +9,7 @@ namespace TrackerParams
     double sigmaDistance = 150.0;           // Desviación estándar del ruido en distancia (mm)
     double qIntensity = 500.0 * 500.0;      // Densidad espectral del ruido de aceleración (mm/s^2)^2
     double mahalanobisGate = 9.21;          // Umbral chi-cuadrado (2 gl, 99%)
-    double maxDropoutTime = 1.0;            // Tiempo máximo sin medidas antes de reiniciar (s)
+    double maxDropoutTime = 2.0;            // Tiempo máximo sin medidas antes de reiniciar (s)
     int maxConsecutiveRejections = 5;       // Rechazos consecutivos antes de forzar reinicio
 }
 
@@ -26,14 +26,14 @@ void PersonTracker::EgoCompensate(double advSpeed, double rotSpeed, double dtEgo
 {
     if (!isInitialized_ || dtEgo <= 0.0) return;
 
-    // En RoboComp rotSpeed positivo gira en sentido antihorario (-x); invertimos signo para el marco del filtro (+x)
-    const double phi = -rotSpeed * dtEgo;
+    // En RoboComp rotSpeed positivo gira el robot en sentido antihorario (+z); el mundo relativo rota en sentido horario (-phi)
+    const double phi = rotSpeed * dtEgo;
     const double cosPhi = std::cos(phi);
     const double sinPhi = std::sin(phi);
 
     Eigen::Matrix2d rotMatrix;
-    rotMatrix << cosPhi, -sinPhi,
-                 sinPhi,  cosPhi;
+    rotMatrix <<  cosPhi,  sinPhi,
+                 -sinPhi,  cosPhi;
 
     const Eigen::Vector2d translation(0.0, advSpeed * dtEgo);
 

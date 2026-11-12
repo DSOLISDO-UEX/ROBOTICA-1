@@ -8,15 +8,15 @@
 namespace ControlParams
 {
     float targetDistMm = 890.0f;         // Distancia objetivo ajustada (mm) [explora el mínimo en 885 mm]
-    float maxAdvSpeed = 1200.0f;         // Velocidad lineal máxima (mm/s)
-    float maxRotSpeed = 2.0f;            // Velocidad angular máxima (rad/s)
-    float kpDist = 1.0f;                 // Ganancia proporcional lineal estable de línea base
-    float kpRot = 5.0f;                  // Ganancia proporcional angular
+    float maxAdvSpeed = 1000.0f;         // Velocidad lineal máxima (mm/s)
+    float maxRotSpeed = 1.5f;            // Velocidad angular máxima (rad/s)
+    float kpDist = 0.9f;                 // Ganancia proporcional lineal estable
+    float kpRot = 2.2f;                  // Ganancia proporcional angular
     float kdVel = 0.85f;                 // Ganancia feed-forward de velocidad radial
-    float distDeadbandMm = 5.0f;         // Zona muerta de error en distancia (mm)
+    float distDeadbandMm = 15.0f;        // Zona muerta de error en distancia (mm)
     double velDeadbandMmS = 20.0;        // Zona muerta de velocidad radial (mm/s)
-    double angleDeadbandRad = 0.01;      // Zona muerta de error angular (rad)
-    float coneHalfApertureRad = 0.3f;    // Semiapertura del cono de filtrado LiDAR (rad)
+    double angleDeadbandRad = 0.02;      // Zona muerta de error angular (rad)
+    float coneHalfApertureRad = 0.45f;   // Semiapertura del cono de filtrado LiDAR (rad)
     double azimuthSign = 1.0;            // Signo de proyección acimutal cámara-LiDAR
     double azimuthOffset = -0.1;         // Offset acimutal cámara-LiDAR (rad)
     int robotLengthMm = 400;             // Tamaño visual del robot en el visor (mm)
@@ -134,6 +134,7 @@ void SpecificWorker::compute()
 
         const double boxCenter = (person.left + person.right) / 2.0;
         rawAngle = (2.0 * M_PI / img.width) * (boxCenter - img.width / 2.0);
+        rawAngle = std::remainder(rawAngle, 2.0 * M_PI);
 
         // Traslación extrínseca desde el LiDAR bpearl hasta la cámara 360 (mm)
         Eigen::Isometry3d camTransform = Eigen::Isometry3d::Identity();
@@ -146,6 +147,25 @@ void SpecificWorker::compute()
             std::tie(projectedPoints, rawDepth) = projResult.value();
             hasValidMeasurement = true;
         }
+        else
+        {
+            // Fallback 1: Si el tracker ya tiene una estimación previa de profundidad, mantenerla
+            if (tracker_.IsInitialized())
+            {
+                const auto [_, prevDepth] = tracker_.GetPolarEstimate();
+                if (prevDepth > 400.0 && prevDepth < 15000.0)
+                {
+                    rawDepth = static_cast<float>(prevDepth);
+                    hasValidMeasurement = true;
+                }
+            }
+            // Fallback 2: Estimar profundidad a partir de la altura en píxeles de la caja delimitadora (h_px ~ 170000 / depth_mm)
+            if (!hasValidMeasurement && roi.height() > 5)
+            {
+                rawDepth = std::clamp(170000.0f / static_cast<float>(roi.height()), 600.0f, 8000.0f);
+                hasValidMeasurement = true;
+            }
+        }
     }
 
     if (hasValidMeasurement)
@@ -154,6 +174,8 @@ void SpecificWorker::compute()
     }
     else if (!tracker_.StepWithoutMeasurement(dtEgo, timeNow))
     {
+        std::cout << "[personFollower] DROPOUT/RESET (no meas, init=" << tracker_.IsInitialized()
+                  << " objs=" << visualObjects.objects.size() << ") -> StopRobot" << std::endl;
         StopRobot();
         return;
     }
@@ -173,23 +195,65 @@ void SpecificWorker::compute()
     if (std::abs(controlAngle) < ControlParams::angleDeadbandRad)
         controlAngle = 0.0;
 
-    // Atenúa el avance lineal proporcionalmente al coseno del desfase angular para priorizar el centrado
-    const float alignmentFactor = std::max(0.0f, static_cast<float>(std::cos(controlAngle)));
+    // Control de avance suave y continuo:
+    // Si la persona está aproximadamente de frente (<25°), avance al 100%.
+    // Si está entre 25° y 80°, modular con coseno garantizando al menos un 25% para no clavar el robot.
+    // Más allá de 80°, pivotar sobre sí mismo para encarar antes de avanzar.
+    const double absAngle = std::abs(controlAngle);
+    float alignmentFactor = 0.0f;
+    if (absAngle < 0.436) // < 25 grados
+    {
+        alignmentFactor = 1.0f;
+    }
+    else if (absAngle < 1.40) // < 80 grados
+    {
+        alignmentFactor = std::max(0.25f, static_cast<float>(std::cos(absAngle)));
+    }
+    else
+    {
+        alignmentFactor = 0.0f;
+    }
 
     float advSpeed = (distError * ControlParams::kpDist + static_cast<float>(radialVel) * ControlParams::kdVel) * alignmentFactor;
-    advSpeed = std::clamp(advSpeed, -ControlParams::maxAdvSpeed, ControlParams::maxAdvSpeed);
+    advSpeed = std::clamp(advSpeed, -300.0f, ControlParams::maxAdvSpeed);
 
     float rotSpeed = std::clamp(static_cast<float>(-controlAngle * ControlParams::kpRot),
                                 -ControlParams::maxRotSpeed, ControlParams::maxRotSpeed);
 
-    omnirobot_proxy->setSpeedBase(0.0f, advSpeed, rotSpeed);
+    static auto lastLogTime = std::chrono::steady_clock::now();
+    const auto nowLog = std::chrono::steady_clock::now();
+    if (std::chrono::duration_cast<std::chrono::milliseconds>(nowLog - lastLogTime).count() >= 500)
+    {
+        lastLogTime = nowLog;
+        std::cout << "[personFollower] det=" << visualObjects.objects.size()
+                  << " meas=" << hasValidMeasurement
+                  << " rawA=" << rawAngle << " rawD=" << rawDepth
+                  << " estA=" << estAngle << " estD=" << estDepth
+                  << " err=" << distError << " align=" << alignmentFactor
+                  << " adv=" << advSpeed << " rot=" << rotSpeed << std::endl;
+    }
+
+    try
+    {
+        omnirobot_proxy->setSpeedBase(0.0f, advSpeed, rotSpeed);
+    }
+    catch (const Ice::Exception& e)
+    {
+        std::cerr << "OmniRobot error: " << e << std::endl;
+    }
     lastAdvCmd_ = advSpeed;
     lastRotCmd_ = rotSpeed;
 }
 
 void SpecificWorker::StopRobot()
 {
-    omnirobot_proxy->setSpeedBase(0.0f, 0.0f, 0.0f);
+    try
+    {
+        omnirobot_proxy->setSpeedBase(0.0f, 0.0f, 0.0f);
+    }
+    catch (const Ice::Exception&)
+    {
+    }
     lastAdvCmd_ = 0.0f;
     lastRotCmd_ = 0.0f;
 }
@@ -197,9 +261,14 @@ void SpecificWorker::StopRobot()
 RoboCompLidar3D::TPoints SpecificWorker::FilterCone(const RoboCompLidar3D::TPoints& points, float minAngle,
                                                     float maxAngle, float minDistance)
 {
+    const float center = (minAngle + maxAngle) * 0.5f;
+    const float halfSpan = std::abs(maxAngle - minAngle) * 0.5f;
+
     auto filtered = points | std::views::filter([=](const auto& point)
     {
-        return point.phi >= minAngle && point.phi <= maxAngle && point.distance2d > minDistance;
+        if (point.distance2d <= minDistance) return false;
+        const float diff = std::remainder(point.phi - center, static_cast<float>(2.0 * M_PI));
+        return std::abs(diff) <= halfSpan;
     });
 
     return std::ranges::to<RoboCompLidar3D::TPoints>(filtered);
@@ -224,6 +293,9 @@ SpecificWorker::ProjectLidarToCamera(
     projectedPoints.reserve(filteredCone.size());
     std::vector<float> distances;
 
+    // Margen expandido alrededor del ROI para atrapar retornos de LiDAR cercanos a los bordes
+    const QRect expandedRoi = roi.adjusted(-12, -12, 12, 12);
+
     for (const auto& lp : filteredCone)
     {
         const Eigen::Vector3d pointLidar(lp.x, lp.y, lp.z);
@@ -243,10 +315,23 @@ SpecificWorker::ProjectLidarToCamera(
 
         const double v = (std::asin(-pointCam.z() / radius) / M_PI + 0.5) * image.height;
 
-        if (roi.contains(QPoint(static_cast<int>(u), static_cast<int>(v))))
+        if (expandedRoi.contains(QPoint(static_cast<int>(u), static_cast<int>(v))))
         {
             projectedPoints.emplace_back(u, v);
             distances.push_back(static_cast<float>(radius));
+        }
+    }
+
+    if (distances.empty())
+    {
+        // Respaldo de proyección: puntos en filteredCone alineados azimutalmente con el centroide
+        for (const auto& lp : filteredCone)
+        {
+            const float diff = std::abs(std::remainder(lp.phi - static_cast<float>(personAngle), static_cast<float>(2.0 * M_PI)));
+            if (diff < 0.20f && lp.distance2d > 400.0f && lp.distance2d < 15000.0f)
+            {
+                distances.push_back(lp.distance2d);
+            }
         }
     }
 
