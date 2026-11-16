@@ -150,9 +150,9 @@ Controller::Output Controller::update(double personAngle,
     {
         alignmentFactor = 1.0f;
     }
-    else if (absAngle < 1.40) // < 80 grados
+    else if (absAngle < 1.57) // < 90 grados
     {
-        alignmentFactor = std::max(0.25f, static_cast<float>(std::cos(absAngle)));
+        alignmentFactor = std::max(0.15f, static_cast<float>(std::cos(absAngle)));
     }
     else
     {
@@ -262,7 +262,7 @@ Controller::Output Controller::update(double personAngle,
         const double bearingToPerson = std::atan2(-dxToEnd, dyToEnd);
         const double headingDiff = std::abs(std::remainder(endTheta - bearingToPerson, 2.0 * M_PI));
         const float costHeading = static_cast<float>(headingDiff / M_PI);
-        const float weightHeadingEff = forwardBlocked ? 0.2f : params_.weightHeading;
+        const float weightHeadingEff = forwardBlocked ? 0.4f : params_.weightHeading;
 
         // Term 4: Distancia a los obstáculos (maximizar holgura -> penalizar cercanía)
         float costObstacle = 0.0f;
@@ -282,9 +282,9 @@ Controller::Output Controller::update(double personAngle,
         // Term 6: Progreso general hacia la persona
         const float costDistToPerson = distToEnd / 4000.0f;
 
-        // Term 7: Alineación suave con el controlador proporcional (desactivado durante evasión frontal)
+        // Term 7: Alineación con el controlador proporcional (durante evasión conserva la dirección angular)
         const float costProp = forwardBlocked
-                                   ? 0.0f
+                                   ? (0.35f * (std::abs(cand.rot - propRot) / (2.0f * params_.maxRotSpeed)))
                                    : (0.5f * (std::abs(cand.adv - propAdv) / params_.maxAdvSpeed) +
                                       0.5f * (std::abs(cand.rot - propRot) / (2.0f * params_.maxRotSpeed)));
 
@@ -306,13 +306,34 @@ Controller::Output Controller::update(double personAngle,
             {
                 costCorridor = 4.0f; // Penalizar detenerse o avanzar recto hacia el obstáculo
             }
-            else if (obsCentroidX <= 0.0f && cand.rot < -0.5f)
+            else
             {
-                costCorridor = -2.0f - 0.5f * std::abs(cand.rot); // Obstáculo a la izquierda -> esquivar por la derecha
-            }
-            else if (obsCentroidX > 0.0f && cand.rot > 0.5f)
-            {
-                costCorridor = -2.0f - 0.5f * std::abs(cand.rot); // Obstáculo a la derecha -> esquivar por la izquierda
+                // Determinar el lado de evasión coherente con la trayectoria de la persona objetivo
+                const bool personIsRightOfObs = (targetPersonX > obsCentroidX);
+                const bool personIsLeftOfObs = (targetPersonX < obsCentroidX);
+
+                if (personIsRightOfObs && cand.rot < -0.4f)
+                {
+                    // La persona pasa por la derecha del obstáculo: premiar giro a la derecha (rot < 0 en coordenadas robot)
+                    costCorridor = -2.0f - 0.5f * std::abs(cand.rot);
+                }
+                else if (personIsLeftOfObs && cand.rot > 0.4f)
+                {
+                    // La persona pasa por la izquierda del obstáculo: premiar giro a la izquierda (rot > 0 en coordenadas robot)
+                    costCorridor = -2.0f - 0.5f * std::abs(cand.rot);
+                }
+                else if (std::abs(targetPersonX - obsCentroidX) < 150.0f)
+                {
+                    // Si la persona está directamente detrás del obstáculo: evadir al lado opuesto al centroide
+                    if (obsCentroidX <= 0.0f && cand.rot < -0.5f)
+                    {
+                        costCorridor = -1.5f - 0.5f * std::abs(cand.rot);
+                    }
+                    else if (obsCentroidX > 0.0f && cand.rot > 0.5f)
+                    {
+                        costCorridor = -1.5f - 0.5f * std::abs(cand.rot);
+                    }
+                }
             }
         }
 
