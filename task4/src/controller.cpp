@@ -150,9 +150,9 @@ Controller::Output Controller::update(double personAngle,
     {
         alignmentFactor = 1.0f;
     }
-    else if (absAngle < 1.57) // < 90 grados
+    else if (absAngle < 1.40) // < 80 grados
     {
-        alignmentFactor = std::max(0.15f, static_cast<float>(std::cos(absAngle)));
+        alignmentFactor = std::max(0.25f, static_cast<float>(std::cos(absAngle)));
     }
     else
     {
@@ -177,6 +177,28 @@ Controller::Output Controller::update(double personAngle,
         std::vector<QPointF> arc;
     };
 
+    // 4. Detección de bloqueo frontal inmediato en el corredor robot-persona
+    // (Solo activo cuando el objetivo está en el cono frontal y hay un obstáculo delante)
+    bool forwardBlocked = false;
+    float obsCentroidX = 0.0f;
+    int blockedCount = 0;
+    if (absAngle < 0.45)
+    {
+        for (const auto& obs : obstacles)
+        {
+            if (obs.y() > 0.0f && obs.y() < std::min(1600.0f, static_cast<float>(personDist)) && std::abs(obs.x()) < 400.0f)
+            {
+                forwardBlocked = true;
+                obsCentroidX += obs.x();
+                blockedCount++;
+            }
+        }
+        if (blockedCount > 0)
+        {
+            obsCentroidX /= static_cast<float>(blockedCount);
+        }
+    }
+
     std::vector<Candidate> validCandidates;
     validCandidates.reserve(params_.advSamples * params_.rotSamples + 1);
 
@@ -188,9 +210,25 @@ Controller::Output Controller::update(double personAngle,
                               : 0.0f;
 
     // Generar candidatos de la rejilla
+    // Si estamos cerca de la persona y en espacio libre, limitar la velocidad máxima de avance
+    float maxAllowedAdv = params_.maxAdvSpeed;
+    if (!forwardBlocked)
+    {
+        if (personDist < 800.0)
+        {
+            maxAllowedAdv = 0.0f;
+        }
+        else if (personDist < params_.targetDistMm)
+        {
+            maxAllowedAdv = std::clamp(propAdv + 150.0f, 0.0f, params_.maxAdvSpeed * 0.6f);
+        }
+    }
+
     for (int i = 0; i < params_.advSamples; ++i)
     {
         const float candAdv = params_.minAdvSpeed + i * advStep;
+        if (candAdv > maxAllowedAdv) continue;
+
         // Para giros in-situ (adv == 0), el umbral es el radio físico del robot (285 mm).
         // Para trayectorias con avance lineal (adv > 0), se incluye el margen de seguridad (320 mm).
         const float currentThresh = (candAdv < 1.0f) ? params_.robotRadiusMm : collisionThreshold;
@@ -219,27 +257,6 @@ Controller::Output Controller::update(double personAngle,
     }
 
     // 5. Evaluación de la función de coste para cada candidato no colisionante
-    // Detectar si el corredor frontal inmediato está bloqueado por un obstáculo
-    // (Solo activo cuando el objetivo está en el cono frontal y hay un obstáculo delante)
-    bool forwardBlocked = false;
-    float obsCentroidX = 0.0f;
-    int blockedCount = 0;
-    if (alignmentFactor > 0.0f)
-    {
-        for (const auto& obs : obstacles)
-        {
-            if (obs.y() > 0.0f && obs.y() < 1600.0f && std::abs(obs.x()) < 420.0f)
-            {
-                forwardBlocked = true;
-                obsCentroidX += obs.x();
-                blockedCount++;
-            }
-        }
-        if (blockedCount > 0)
-        {
-            obsCentroidX /= static_cast<float>(blockedCount);
-        }
-    }
 
     float bestCost = std::numeric_limits<float>::max();
     Candidate bestCandidate;
@@ -262,7 +279,7 @@ Controller::Output Controller::update(double personAngle,
         const double bearingToPerson = std::atan2(-dxToEnd, dyToEnd);
         const double headingDiff = std::abs(std::remainder(endTheta - bearingToPerson, 2.0 * M_PI));
         const float costHeading = static_cast<float>(headingDiff / M_PI);
-        const float weightHeadingEff = forwardBlocked ? 0.4f : params_.weightHeading;
+        const float weightHeadingEff = forwardBlocked ? 0.2f : params_.weightHeading;
 
         // Term 4: Distancia a los obstáculos (maximizar holgura -> penalizar cercanía)
         float costObstacle = 0.0f;
@@ -273,18 +290,23 @@ Controller::Output Controller::update(double personAngle,
             costObstacle = std::clamp(costObstacle, 0.0f, 2.0f);
         }
 
-        // Term 5: Preferir movimientos rápidos hacia el objetivo (atenuado cerca de la distancia nominal de 1m)
-        const float costSpeed = 1.0f - (cand.adv / params_.maxAdvSpeed);
-        const float weightSpeedEff = (std::abs(distError) < 120.0f && !forwardBlocked)
-                                         ? 0.35f
-                                         : params_.weightSpeed;
+        // Term 5: Preferir movimientos rápidos hacia el objetivo sólo cuando estamos lejos o evadiendo
+        float costSpeed = 0.0f;
+        if (personDist > 1400.0f || forwardBlocked)
+        {
+            costSpeed = 1.0f - (cand.adv / params_.maxAdvSpeed);
+        }
 
-        // Term 6: Progreso general hacia la persona
-        const float costDistToPerson = distToEnd / 4000.0f;
+        // Term 6: Progreso general hacia la persona sólo cuando estamos lejos
+        float costDistToPerson = 0.0f;
+        if (personDist > 1600.0f)
+        {
+            costDistToPerson = distToEnd / 4000.0f;
+        }
 
-        // Term 7: Alineación con el controlador proporcional (durante evasión conserva la dirección angular)
+        // Term 7: Alineación suave con el controlador proporcional (desactivado durante evasión frontal)
         const float costProp = forwardBlocked
-                                   ? (0.35f * (std::abs(cand.rot - propRot) / (2.0f * params_.maxRotSpeed)))
+                                   ? 0.0f
                                    : (0.5f * (std::abs(cand.adv - propAdv) / params_.maxAdvSpeed) +
                                       0.5f * (std::abs(cand.rot - propRot) / (2.0f * params_.maxRotSpeed)));
 
@@ -294,7 +316,7 @@ Controller::Output Controller::update(double personAngle,
         {
             if (cand.rot * lastChosenRot_ < 0.0f)
             {
-                costHysteresis = 0.6f; // Penalizar cambios bruscos de sentido de giro
+                costHysteresis = 0.3f; // Penalizar cambios bruscos de sentido de giro
             }
         }
 
@@ -302,38 +324,17 @@ Controller::Output Controller::update(double personAngle,
         float costCorridor = 0.0f;
         if (forwardBlocked)
         {
-            if (cand.adv < 50.0f || std::abs(cand.rot) < 0.6f)
+            if (obsCentroidX <= 0.0f && cand.rot < -0.5f)
             {
-                costCorridor = 4.0f; // Penalizar detenerse o avanzar recto hacia el obstáculo
+                costCorridor = -2.0f - 0.5f * std::abs(cand.rot); // Obstáculo a la izquierda -> esquivar por la derecha
+            }
+            else if (obsCentroidX > 0.0f && cand.rot > 0.5f)
+            {
+                costCorridor = -2.0f - 0.5f * std::abs(cand.rot); // Obstáculo a la derecha -> esquivar por la izquierda
             }
             else
             {
-                // Determinar el lado de evasión coherente con la trayectoria de la persona objetivo
-                const bool personIsRightOfObs = (targetPersonX > obsCentroidX);
-                const bool personIsLeftOfObs = (targetPersonX < obsCentroidX);
-
-                if (personIsRightOfObs && cand.rot < -0.4f)
-                {
-                    // La persona pasa por la derecha del obstáculo: premiar giro a la derecha (rot < 0 en coordenadas robot)
-                    costCorridor = -2.0f - 0.5f * std::abs(cand.rot);
-                }
-                else if (personIsLeftOfObs && cand.rot > 0.4f)
-                {
-                    // La persona pasa por la izquierda del obstáculo: premiar giro a la izquierda (rot > 0 en coordenadas robot)
-                    costCorridor = -2.0f - 0.5f * std::abs(cand.rot);
-                }
-                else if (std::abs(targetPersonX - obsCentroidX) < 150.0f)
-                {
-                    // Si la persona está directamente detrás del obstáculo: evadir al lado opuesto al centroide
-                    if (obsCentroidX <= 0.0f && cand.rot < -0.5f)
-                    {
-                        costCorridor = -1.5f - 0.5f * std::abs(cand.rot);
-                    }
-                    else if (obsCentroidX > 0.0f && cand.rot > 0.5f)
-                    {
-                        costCorridor = -1.5f - 0.5f * std::abs(cand.rot);
-                    }
-                }
+                costCorridor = 3.0f; // Penalizar permanecer en el corredor o girar hacia el obstáculo
             }
         }
 
@@ -341,7 +342,7 @@ Controller::Output Controller::update(double personAngle,
         cand.cost = params_.weightTargetDist * costTargetDist +
                     weightHeadingEff * costHeading +
                     params_.weightObstacle * costObstacle +
-                    weightSpeedEff * costSpeed +
+                    params_.weightSpeed * costSpeed +
                     params_.weightDistToPerson * costDistToPerson +
                     params_.weightPropAlignment * costProp +
                     costHysteresis +
@@ -376,27 +377,10 @@ Controller::Output Controller::update(double personAngle,
     else
     {
         // En caso de que todos los candidatos estén restringidos por cercanía:
-        // Prioridad de seguridad: velocidad lineal cero y rotar in-situ suavemente para encarar a la persona
+        // Prioridad de seguridad: velocidad lineal cero y rotar in-situ para encarar a la persona
         out.advSpeed = 0.0f;
         const double bearingToGoal = std::atan2(-targetPersonX, targetPersonY);
-        if (std::abs(bearingToGoal) < 0.05)
-        {
-            // Dentro de ~3 grados: ya está encarado, evitar chattering angular innecesario
-            out.rotSpeed = 0.0f;
-            lastPivotRot_ = 0.0f;
-        }
-        else
-        {
-            float desiredRot = std::clamp(static_cast<float>(bearingToGoal * params_.kpRot),
-                                          -params_.maxRotSpeed, params_.maxRotSpeed);
-            // Bloqueo de histéresis direccional para prevenir vibración bang-bang izquierda/derecha
-            if (lastPivotRot_ != 0.0f && (desiredRot * lastPivotRot_ < 0.0f) && std::abs(bearingToGoal) < 0.25)
-            {
-                desiredRot = (lastPivotRot_ > 0.0f) ? std::min(desiredRot, lastPivotRot_) : std::max(desiredRot, lastPivotRot_);
-            }
-            out.rotSpeed = desiredRot;
-            lastPivotRot_ = desiredRot;
-        }
+        out.rotSpeed = (bearingToGoal >= 0.0) ? params_.maxRotSpeed : -params_.maxRotSpeed;
         out.isAvoiding = true;
         out.minObsDist = params_.robotRadiusMm;
         out.bestArc = generateArc(0.0, out.rotSpeed, params_.simTimeSec, params_.simSteps);

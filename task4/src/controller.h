@@ -33,16 +33,16 @@ public:
 
         // Proportional Controller Baseline
         float kpDist = 0.9f;                // Linear gain
-        float kpRot = 2.2f;                 // Angular steering gain
+        float kpRot = 1.2f;                 // Angular steering gain
         float kdVel = 0.85f;                // Radial velocity feedforward gain
 
         // Cost Function Weights
-        float weightTargetDist = 1.0f;      // Term: end of arc at 1m from person
-        float weightHeading = 0.5f;         // Term: end of arc faces the person (moderate to allow dodging)
+        float weightTargetDist = 2.5f;      // Term: end of arc at 1m from person (primary goal)
+        float weightHeading = 0.8f;         // Term: end of arc faces the person (moderate to allow dodging)
         float weightObstacle = 1.8f;        // Term: distance to obstacles (avoidance priority)
-        float weightSpeed = 1.2f;           // Term: prefer fast movements
-        float weightDistToPerson = 0.8f;    // Term: close distance to person when far
-        float weightPropAlignment = 0.3f;   // Bias towards proportional controller (only in free space)
+        float weightSpeed = 0.8f;           // Term: prefer fast movements when far
+        float weightDistToPerson = 0.6f;    // Term: close distance to person when far
+        float weightPropAlignment = 1.0f;   // Bias towards proportional controller (only in free space)
 
         // Clearance thresholds
         float obstacleInfluenceDistMm = 900.0f; // Range where obstacle creates repulsive cost
