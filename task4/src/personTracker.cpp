@@ -9,7 +9,7 @@ namespace TrackerParams
     double sigmaDistance = 150.0;           // Desviación estándar del ruido en distancia (mm)
     double qIntensity = 500.0 * 500.0;      // Densidad espectral del ruido de aceleración (mm/s^2)^2
     double mahalanobisGate = 9.21;          // Umbral chi-cuadrado (2 gl, 99%)
-    double maxDropoutTime = 2.0;            // Tiempo máximo sin medidas antes de reiniciar (s)
+    double maxDropoutTime = 6.0;            // Tiempo máximo sin medidas antes de reiniciar (s) (tolerancia a oclusiones por cajas)
     int maxConsecutiveRejections = 5;       // Rechazos consecutivos antes de forzar reinicio
 }
 
