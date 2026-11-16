@@ -273,8 +273,11 @@ Controller::Output Controller::update(double personAngle,
             costObstacle = std::clamp(costObstacle, 0.0f, 2.0f);
         }
 
-        // Term 5: Preferir movimientos rápidos hacia el objetivo
+        // Term 5: Preferir movimientos rápidos hacia el objetivo (atenuado cerca de la distancia nominal de 1m)
         const float costSpeed = 1.0f - (cand.adv / params_.maxAdvSpeed);
+        const float weightSpeedEff = (std::abs(distError) < 120.0f && !forwardBlocked)
+                                         ? 0.35f
+                                         : params_.weightSpeed;
 
         // Term 6: Progreso general hacia la persona
         const float costDistToPerson = distToEnd / 4000.0f;
@@ -317,7 +320,7 @@ Controller::Output Controller::update(double personAngle,
         cand.cost = params_.weightTargetDist * costTargetDist +
                     weightHeadingEff * costHeading +
                     params_.weightObstacle * costObstacle +
-                    params_.weightSpeed * costSpeed +
+                    weightSpeedEff * costSpeed +
                     params_.weightDistToPerson * costDistToPerson +
                     params_.weightPropAlignment * costProp +
                     costHysteresis +
@@ -352,10 +355,27 @@ Controller::Output Controller::update(double personAngle,
     else
     {
         // En caso de que todos los candidatos estén restringidos por cercanía:
-        // Prioridad de seguridad: velocidad lineal cero y rotar in-situ para encarar a la persona
+        // Prioridad de seguridad: velocidad lineal cero y rotar in-situ suavemente para encarar a la persona
         out.advSpeed = 0.0f;
         const double bearingToGoal = std::atan2(-targetPersonX, targetPersonY);
-        out.rotSpeed = (bearingToGoal >= 0.0) ? params_.maxRotSpeed : -params_.maxRotSpeed;
+        if (std::abs(bearingToGoal) < 0.05)
+        {
+            // Dentro de ~3 grados: ya está encarado, evitar chattering angular innecesario
+            out.rotSpeed = 0.0f;
+            lastPivotRot_ = 0.0f;
+        }
+        else
+        {
+            float desiredRot = std::clamp(static_cast<float>(bearingToGoal * params_.kpRot),
+                                          -params_.maxRotSpeed, params_.maxRotSpeed);
+            // Bloqueo de histéresis direccional para prevenir vibración bang-bang izquierda/derecha
+            if (lastPivotRot_ != 0.0f && (desiredRot * lastPivotRot_ < 0.0f) && std::abs(bearingToGoal) < 0.25)
+            {
+                desiredRot = (lastPivotRot_ > 0.0f) ? std::min(desiredRot, lastPivotRot_) : std::max(desiredRot, lastPivotRot_);
+            }
+            out.rotSpeed = desiredRot;
+            lastPivotRot_ = desiredRot;
+        }
         out.isAvoiding = true;
         out.minObsDist = params_.robotRadiusMm;
         out.bestArc = generateArc(0.0, out.rotSpeed, params_.simTimeSec, params_.simSteps);

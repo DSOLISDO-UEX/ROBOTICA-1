@@ -28,7 +28,7 @@ public:
         // DWA Simulation Settings
         float simTimeSec = 0.8f;            // Forward projection horizon (s)
         int simSteps = 8;                   // Arc discretization steps along trajectory
-        int advSamples = 19;                // Discretization samples for advance speed (0..1000)
+        int advSamples = 21;                // Discretization samples for advance speed (0..1000, 50mm/s resolution)
         int rotSamples = 25;                // Discretization samples for rotational speed (-1.2..1.2)
 
         // Proportional Controller Baseline
