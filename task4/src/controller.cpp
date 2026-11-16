@@ -177,26 +177,22 @@ Controller::Output Controller::update(double personAngle,
         std::vector<QPointF> arc;
     };
 
-    // 4. Detección de bloqueo frontal inmediato en el corredor robot-persona
-    // (Solo activo cuando el objetivo está en el cono frontal y hay un obstáculo delante)
+    // 4. Detección de bloqueo frontal en el corredor hacia el objetivo
     bool forwardBlocked = false;
     float obsCentroidX = 0.0f;
     int blockedCount = 0;
-    if (absAngle < 0.45)
+    for (const auto& obs : obstacles)
     {
-        for (const auto& obs : obstacles)
+        if (obs.y() > 0.0f && obs.y() < std::min(1700.0f, static_cast<float>(personDist) + 200.0f) && std::abs(obs.x()) < 420.0f)
         {
-            if (obs.y() > 0.0f && obs.y() < std::min(1600.0f, static_cast<float>(personDist)) && std::abs(obs.x()) < 400.0f)
-            {
-                forwardBlocked = true;
-                obsCentroidX += obs.x();
-                blockedCount++;
-            }
+            forwardBlocked = true;
+            obsCentroidX += obs.x();
+            blockedCount++;
         }
-        if (blockedCount > 0)
-        {
-            obsCentroidX /= static_cast<float>(blockedCount);
-        }
+    }
+    if (blockedCount > 0)
+    {
+        obsCentroidX /= static_cast<float>(blockedCount);
     }
 
     std::vector<Candidate> validCandidates;
@@ -279,7 +275,8 @@ Controller::Output Controller::update(double personAngle,
         const double bearingToPerson = std::atan2(-dxToEnd, dyToEnd);
         const double headingDiff = std::abs(std::remainder(endTheta - bearingToPerson, 2.0 * M_PI));
         const float costHeading = static_cast<float>(headingDiff / M_PI);
-        const float weightHeadingEff = forwardBlocked ? 0.2f : params_.weightHeading;
+        const bool nearObstacle = forwardBlocked || (cand.minObsDist < 700.0f);
+        const float weightHeadingEff = nearObstacle ? 0.3f : params_.weightHeading;
 
         // Term 4: Distancia a los obstáculos (maximizar holgura -> penalizar cercanía)
         float costObstacle = 0.0f;
@@ -292,7 +289,7 @@ Controller::Output Controller::update(double personAngle,
 
         // Term 5: Preferir movimientos rápidos hacia el objetivo sólo cuando estamos lejos o evadiendo
         float costSpeed = 0.0f;
-        if (personDist > 1400.0f || forwardBlocked)
+        if (personDist > 1400.0f || nearObstacle)
         {
             costSpeed = 1.0f - (cand.adv / params_.maxAdvSpeed);
         }
@@ -304,8 +301,8 @@ Controller::Output Controller::update(double personAngle,
             costDistToPerson = distToEnd / 4000.0f;
         }
 
-        // Term 7: Alineación suave con el controlador proporcional (desactivado durante evasión frontal)
-        const float costProp = forwardBlocked
+        // Term 7: Alineación suave con el controlador proporcional (desactivado cerca de obstáculos)
+        const float costProp = nearObstacle
                                    ? 0.0f
                                    : (0.5f * (std::abs(cand.adv - propAdv) / params_.maxAdvSpeed) +
                                       0.5f * (std::abs(cand.rot - propRot) / (2.0f * params_.maxRotSpeed)));
@@ -320,21 +317,17 @@ Controller::Output Controller::update(double personAngle,
             }
         }
 
-        // Term 9: Prioridad de evasión jerárquica cuando el frente está bloqueado
+        // Term 9: Cuando el frente directo está bloqueado, penalizar trayectorias que van recto o se detienen
         float costCorridor = 0.0f;
         if (forwardBlocked)
         {
-            if (obsCentroidX <= 0.0f && cand.rot < -0.5f)
+            if (std::abs(cand.rot) < 0.25f)
             {
-                costCorridor = -2.0f - 0.5f * std::abs(cand.rot); // Obstáculo a la izquierda -> esquivar por la derecha
+                costCorridor += 1.5f; // Penalizar avanzar recto hacia el obstáculo bloqueante
             }
-            else if (obsCentroidX > 0.0f && cand.rot > 0.5f)
+            if (cand.adv < 100.0f)
             {
-                costCorridor = -2.0f - 0.5f * std::abs(cand.rot); // Obstáculo a la derecha -> esquivar por la izquierda
-            }
-            else
-            {
-                costCorridor = 3.0f; // Penalizar permanecer en el corredor o girar hacia el obstáculo
+                costCorridor += 0.8f; // Desincentivar detenerse cuando hay holgura para maniobrar
             }
         }
 
