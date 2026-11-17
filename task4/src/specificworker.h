@@ -1,24 +1,23 @@
 #ifndef SPECIFICWORKER_H
 #define SPECIFICWORKER_H
 
-// #define HIBERNATION_ENABLED
-
 #ifdef emit
 #undef emit
 #endif
 
-#include <algorithm>
 #include <optional>
 #include <tuple>
 #include <vector>
-#include <genericworker.h>
+
 #include <abstract_graphic_viewer/abstract_graphic_viewer.h>
+#include <genericworker.h>
 #include <Eigen/Dense>
-#include "personTracker.h"
+
 #include "controller.h"
+#include "personTracker.h"
 
 /**
- * @brief Componente principal para el seguimiento de personas y evasión de obstáculos con DWA.
+ * @brief Main RoboComp worker component for person tracking and DWA obstacle avoidance.
  */
 class SpecificWorker : public GenericWorker
 {
@@ -26,102 +25,100 @@ class SpecificWorker : public GenericWorker
 
 public:
     /**
-     * @brief Constructor de SpecificWorker.
-     * @param configLoader Cargador de configuración del componente.
-     * @param tprx Tupla de proxies de comunicaciones de RoboComp.
-     * @param startupCheck Indica si se ejecuta en modo de comprobación inicial.
+     * @brief Constructs SpecificWorker component.
+     * @param config_loader Configuration loader for component.
+     * @param tprx RoboComp communication proxies tuple.
+     * @param startup_check Flag indicating initial diagnostic startup check mode.
      */
-    SpecificWorker(const ConfigLoader& configLoader, TuplePrx tprx, bool startupCheck);
+    SpecificWorker(const ConfigLoader& config_loader, TuplePrx tprx, bool startup_check);
 
     /**
-     * @brief Destructor de SpecificWorker.
+     * @brief Destructs SpecificWorker.
      */
     ~SpecificWorker() override;
 
 public slots:
     /**
-     * @brief Inicializa el visor gráfico y la geometría del robot.
+     * @brief Initializes graphical viewer and robot scene geometry.
      */
     void initialize() override;
 
     /**
-     * @brief Ciclo principal: compensa egomoción, fusiona LiDAR/cámara, actualiza Kalman y ejecuta controlador DWA.
+     * @brief Main compute loop: compensates egomotion, fuses sensor data, and executes DWA control.
      */
     void compute() override;
 
     /**
-     * @brief Gestiona el estado de emergencia del componente.
+     * @brief Handles component emergency state.
      */
     void emergency() override;
 
     /**
-     * @brief Restaura el componente tras un estado de emergencia.
+     * @brief Restores component from emergency state.
      */
     void restore() override;
 
     /**
-     * @brief Realiza la comprobación de arranque del componente.
-     * @return Código de retorno del chequeo.
+     * @brief Executes component startup diagnostic check.
+     * @return Status code (0 for success).
      */
     int startup_check();
 
 private:
-    bool startupCheckFlag_ = false;
-    QRectF dimensions_;
+    bool startup_check_flag_ = false;
     AbstractGraphicViewer* viewer_ = nullptr;
-    QGraphicsItem* robotPolygon_ = nullptr;
     PersonTracker tracker_;
     Controller controller_;
-    double timeLastCycle_ = -1.0;
-    float lastAdvCmd_ = 0.0f;
-    float lastRotCmd_ = 0.0f;
+    double time_last_cycle_ = -1.0;
+    float last_adv_cmd_ = 0.0f;
+    float last_rot_cmd_ = 0.0f;
 
     /**
-     * @brief Detiene la base omnidireccional y pone a cero los registros de comandos previos.
+     * @brief Commands omnidirectional base to zero velocity and resets command records.
      */
     void StopRobot();
 
     /**
-     * @brief Filtra los puntos 3D del LiDAR dentro de un sector angular y por encima de una distancia mínima.
-     * @param points Nube de puntos de entrada.
-     * @param minAngle Ángulo mínimo del cono (rad).
-     * @param maxAngle Ángulo máximo del cono (rad).
-     * @param minDistance Distancia mínima 2D permitida (mm).
-     * @return Puntos filtrados dentro del cono.
+     * @brief Filters 3D LiDAR point cloud within an angular cone and minimum distance.
+     * @param points Input LiDAR point cloud.
+     * @param min_angle Minimum cone angle (rad).
+     * @param max_angle Maximum cone angle (rad).
+     * @param min_distance Minimum 2D radial distance (mm).
+     * @return Filtered points inside cone.
      */
-    RoboCompLidar3D::TPoints FilterCone(const RoboCompLidar3D::TPoints& points, float minAngle,
-                                        float maxAngle, float minDistance = 0.0f);
+    RoboCompLidar3D::TPoints FilterCone(const RoboCompLidar3D::TPoints& points, float min_angle,
+                                        float max_angle, float min_distance = 0.0f);
 
     /**
-     * @brief Proyecta puntos LiDAR sobre la imagen equirectangular 360 y calcula la profundidad mínima en la ROI.
+     * @brief Projects LiDAR points onto 360 equirectangular camera image and finds target ROI depth.
      */
     std::optional<std::tuple<std::vector<QPointF>, float>> ProjectLidarToCamera(
         const RoboCompLidar3D::TPoints& points,
-        const Eigen::Isometry3d& camTransform,
-        double personAngle,
+        const Eigen::Isometry3d& cam_transform,
+        double person_angle,
         const RoboCompCamera360RGB::TImage& image,
         const QRect& roi,
-        double azimuthSign,
-        double azimuthOffset);
+        double azimuth_sign,
+        double azimuth_offset);
 
     /**
-     * @brief Renderiza la imagen 360 con la ROI, las guías de centrado y las proyecciones del LiDAR.
+     * @brief Renders 360 camera image with person ROI, centering guides, and projected points.
      */
     void DrawImage(const RoboCompCamera360RGB::TImage& raw, const QRect& roi,
-                   const std::vector<QPointF>& projectedPoints, QLabel* targetLabel);
+                   const std::vector<QPointF>& projected_points, QLabel* target_label);
 
     /**
-     * @brief Dibuja la posición y datos estimados de la persona en la escena 2D del visor.
+     * @brief Visualizes estimated person location and metrics in 2D graphic scene.
      */
-    void DrawPersonInLidar(float personAngle, float distance, QGraphicsScene* scene);
+    void DrawPersonInLidar(float person_angle, float distance, QGraphicsScene* scene);
 
     /**
-     * @brief Dibuja los puntos de la nube LiDAR en la escena 2D del visor.
+     * @brief Visualizes LiDAR point cloud returns in 2D graphic scene.
      */
     void DrawLidar(const RoboCompLidar3D::TPoints& points, QGraphicsScene* scene);
 
     /**
-     * @brief Dibuja los arcos de trayectoria evaluados y seleccionados por DWA en la escena 2D.
+     * @brief Visualizes candidate and optimal trajectory arcs in 2D graphic scene.
      */
     void DrawDwaArcs(const Controller::Output& output, QGraphicsScene* scene);
 };

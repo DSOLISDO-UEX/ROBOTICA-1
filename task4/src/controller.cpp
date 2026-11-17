@@ -1,30 +1,24 @@
 #include "controller.h"
-#include <limits>
-#include <cmath>
+
 #include <algorithm>
-#include <iostream>
+#include <cmath>
+#include <limits>
 
-Controller::Controller()
-    : params_(Params{})
-{
-}
+Controller::Controller() : params_(Params{}) {}
 
-Controller::Controller(const Params& params)
-    : params_(params)
-{
-}
+Controller::Controller(const Params& params) : params_(params) {}
 
-void Controller::setParams(const Params& params)
+void Controller::SetParams(const Params& params)
 {
     params_ = params;
 }
 
-const Controller::Params& Controller::getParams() const
+const Controller::Params& Controller::GetParams() const
 {
     return params_;
 }
 
-std::tuple<double, double, double> Controller::forwardModel(double adv, double rot, double dt)
+std::tuple<double, double, double> Controller::ForwardModel(double adv, double rot, double dt)
 {
     if (std::abs(rot) < 1e-4)
     {
@@ -32,14 +26,14 @@ std::tuple<double, double, double> Controller::forwardModel(double adv, double r
     }
 
     const double theta = rot * dt;
-    // En coordenadas del robot: +Y es avance longitudinal, +X lateral derecha, -X lateral izquierda
-    // rot > 0 gira antihorario (hacia -X), rot < 0 gira horario (hacia +X)
+    // Robot frame: +Y is longitudinal forward, +X is lateral right, -X is lateral left.
+    // rot > 0 turns counter-clockwise (towards -X), rot < 0 turns clockwise (towards +X).
     const double x = (adv / rot) * (std::cos(theta) - 1.0);
     const double y = (adv / rot) * std::sin(theta);
     return {x, y, theta};
 }
 
-std::vector<QPointF> Controller::generateArc(double adv, double rot, double duration, int steps) const
+std::vector<QPointF> Controller::GenerateArc(double adv, double rot, double duration, int steps) const
 {
     std::vector<QPointF> arc;
     arc.reserve(steps + 1);
@@ -48,36 +42,36 @@ std::vector<QPointF> Controller::generateArc(double adv, double rot, double dura
     for (int i = 1; i <= steps; ++i)
     {
         const double t = duration * (static_cast<double>(i) / steps);
-        const auto [x, y, _] = forwardModel(adv, rot, t);
+        const auto [x, y, _] = ForwardModel(adv, rot, t);
         arc.emplace_back(static_cast<float>(x), static_cast<float>(y));
     }
     return arc;
 }
 
-std::vector<QPointF> Controller::extractObstaclePoints(const RoboCompLidar3D::TPoints& points,
-                                                      const QPointF& personPos) const
+std::vector<QPointF> Controller::ExtractObstaclePoints(const RoboCompLidar3D::TPoints& points,
+                                                      const QPointF& person_pos) const
 {
     std::vector<QPointF> obstacles;
     obstacles.reserve(std::min<size_t>(points.size(), 600));
 
-    const float personExclusionSq = params_.personBodyRadiusMm * params_.personBodyRadiusMm;
+    const float person_exclusion_sq = params_.person_body_radius_mm * params_.person_body_radius_mm;
 
     for (const auto& pt : points)
     {
-        // Descartar retornos sobre el chasis y ruedas propias del robot
-        if (pt.distance2d < params_.minSelfChassisDistMm) continue;
+        // Filter out robot chassis self-returns and wheelpods
+        if (pt.distance2d < params_.min_self_chassis_dist_mm) continue;
         if (std::abs(pt.x) < 320.0f && std::abs(pt.y) < 300.0f) continue;
-        // Descartar obstáculos demasiado lejanos para la planificación reactiva local (> 4000 mm)
+        // Filter out obstacles beyond local planning horizon
         if (pt.distance2d > 4000.0f) continue;
-        // Enfocar en el semicírculo frontal y lateral relevante (-400 mm < y < 3500 mm, |x| < 2500 mm)
+        // Relevant frontal and lateral semi-plane (-400 mm < y < 3500 mm, |x| < 2500 mm)
         if (pt.y < -400.0f || pt.y > 3500.0f || std::abs(pt.x) > 2500.0f) continue;
 
-        // Comprobar si el punto pertenece al cuerpo de la persona objetivo
-        const float dxPerson = pt.x - personPos.x();
-        const float dyPerson = pt.y - personPos.y();
-        if ((dxPerson * dxPerson + dyPerson * dyPerson) < personExclusionSq)
+        // Exclude target person points
+        const float dx_person = pt.x - person_pos.x();
+        const float dy_person = pt.y - person_pos.y();
+        if ((dx_person * dx_person + dy_person * dy_person) < person_exclusion_sq)
         {
-            continue; // Excluir puntos de la persona para no repelerse de ella
+            continue;
         }
 
         obstacles.emplace_back(pt.x, pt.y);
@@ -85,304 +79,263 @@ std::vector<QPointF> Controller::extractObstaclePoints(const RoboCompLidar3D::TP
     return obstacles;
 }
 
-std::pair<bool, float> Controller::evaluateObstacleClearance(const std::vector<QPointF>& arc,
+std::pair<bool, float> Controller::EvaluateObstacleClearance(const std::vector<QPointF>& arc,
                                                             const std::vector<QPointF>& obstacles,
-                                                            float collisionThreshold) const
+                                                            float collision_threshold) const
 {
     if (obstacles.empty())
     {
         return {false, 99999.0f};
     }
 
-    float minDistance = 99999.0f;
-    const float colThreshSq = collisionThreshold * collisionThreshold;
+    float min_distance = 99999.0f;
+    const float col_thresh_sq = collision_threshold * collision_threshold;
 
-    for (const auto& arcPt : arc)
+    for (const auto& arc_pt : arc)
     {
-        for (const auto& obsPt : obstacles)
+        for (const auto& obs_pt : obstacles)
         {
-            const float dx = arcPt.x() - obsPt.x();
-            const float dy = arcPt.y() - obsPt.y();
-            const float distSq = dx * dx + dy * dy;
+            const float dx = arc_pt.x() - obs_pt.x();
+            const float dy = arc_pt.y() - obs_pt.y();
+            const float dist_sq = dx * dx + dy * dy;
 
-            if (distSq < colThreshSq)
+            if (dist_sq < col_thresh_sq)
             {
-                return {true, std::sqrt(distSq)}; // Colisión detectada a lo largo del arco
+                return {true, std::sqrt(dist_sq)};
             }
 
-            if (distSq < minDistance * minDistance)
+            if (dist_sq < min_distance * min_distance)
             {
-                minDistance = std::sqrt(distSq);
+                min_distance = std::sqrt(dist_sq);
             }
         }
     }
 
-    return {false, minDistance};
+    return {false, min_distance};
 }
 
-Controller::Output Controller::update(double personAngle,
-                                      double personDist,
-                                      double radialVel,
-                                      double personVelX,
-                                      double personVelY,
-                                      const RoboCompLidar3D::TPoints& lidarPoints)
+Controller::Output Controller::Update(double person_angle,
+                                      double person_dist,
+                                      double radial_vel,
+                                      double person_vel_x,
+                                      double person_vel_y,
+                                      const RoboCompLidar3D::TPoints& lidar_points)
 {
     Output out;
 
-    // 1. Posición cartesiana actual y predicha de la persona en el marco del robot
-    const float currentPersonX = static_cast<float>(personDist * std::sin(personAngle));
-    const float currentPersonY = static_cast<float>(personDist * std::cos(personAngle));
-    const QPointF currentPersonPos(currentPersonX, currentPersonY);
+    const float current_person_x = static_cast<float>(person_dist * std::sin(person_angle));
+    const float current_person_y = static_cast<float>(person_dist * std::cos(person_angle));
+    const QPointF current_person_pos(current_person_x, current_person_y);
 
-    // Predicción de la persona al final del horizonte de simulación
-    const float targetPersonX = currentPersonX + static_cast<float>(personVelX * params_.simTimeSec);
-    const float targetPersonY = currentPersonY + static_cast<float>(personVelY * params_.simTimeSec);
+    const float target_person_x = current_person_x + static_cast<float>(person_vel_x * params_.sim_time_sec);
+    const float target_person_y = current_person_y + static_cast<float>(person_vel_y * params_.sim_time_sec);
 
-    // 2. Extraer puntos de obstáculos estáticos (cajas, paredes), ignorando a la persona
-    const auto obstacles = extractObstaclePoints(lidarPoints, currentPersonPos);
+    const auto obstacles = ExtractObstaclePoints(lidar_points, current_person_pos);
 
-    // 3. Comando de referencia del controlador proporcional (línea base de seguimiento)
-    const float distError = static_cast<float>(personDist) - params_.targetDistMm;
-    const double absAngle = std::abs(personAngle);
+    // Proportional baseline controller
+    const float dist_error = static_cast<float>(person_dist) - params_.target_dist_mm;
+    const double abs_angle = std::abs(person_angle);
 
-    float alignmentFactor = 0.0f;
-    if (absAngle < 0.436) // < 25 grados
+    float alignment_factor = 0.0f;
+    if (abs_angle < 0.436) // < 25 degrees
     {
-        alignmentFactor = 1.0f;
+        alignment_factor = 1.0f;
     }
-    else if (absAngle < 1.40) // < 80 grados
+    else if (abs_angle < 1.40) // < 80 degrees
     {
-        alignmentFactor = std::max(0.25f, static_cast<float>(std::cos(absAngle)));
-    }
-    else
-    {
-        alignmentFactor = 0.0f;
+        alignment_factor = std::max(0.25f, static_cast<float>(std::cos(abs_angle)));
     }
 
-    float propAdv = (distError * params_.kpDist + static_cast<float>(radialVel) * params_.kdVel) * alignmentFactor;
-    propAdv = std::clamp(propAdv, params_.minAdvSpeed, params_.maxAdvSpeed);
+    float prop_adv = (dist_error * params_.kp_dist + static_cast<float>(radial_vel) * params_.kd_vel) * alignment_factor;
+    prop_adv = std::clamp(prop_adv, params_.min_adv_speed, params_.max_adv_speed);
 
-    float propRot = std::clamp(static_cast<float>(-personAngle * params_.kpRot),
-                               -params_.maxRotSpeed, params_.maxRotSpeed);
+    const float prop_rot = std::clamp(static_cast<float>(-person_angle * params_.kp_rot),
+                                      -params_.max_rot_speed, params_.max_rot_speed);
 
-    // 4. Muestreo del espacio de velocidades DWA: adv{0 .. 1000} x rot{-1 .. 1}
-    const float collisionThreshold = params_.robotRadiusMm + params_.safetyMarginMm;
+    const float collision_threshold = params_.robot_radius_mm + params_.safety_margin_mm;
 
     struct Candidate
     {
         float adv = 0.0f;
         float rot = 0.0f;
         float cost = std::numeric_limits<float>::max();
-        float minObsDist = 99999.0f;
+        float min_obs_dist = 99999.0f;
         std::vector<QPointF> arc;
     };
 
-    // 4. Detección de bloqueo frontal en el corredor hacia el objetivo
-    bool forwardBlocked = false;
-    float obsCentroidX = 0.0f;
-    int blockedCount = 0;
+    bool forward_blocked = false;
     for (const auto& obs : obstacles)
     {
-        if (obs.y() > 0.0f && obs.y() < std::min(1700.0f, static_cast<float>(personDist) + 200.0f) && std::abs(obs.x()) < 420.0f)
+        if (obs.y() > 0.0f && obs.y() < std::min(1700.0f, static_cast<float>(person_dist) + 200.0f) &&
+            std::abs(obs.x()) < 420.0f)
         {
-            forwardBlocked = true;
-            obsCentroidX += obs.x();
-            blockedCount++;
-        }
-    }
-    if (blockedCount > 0)
-    {
-        obsCentroidX /= static_cast<float>(blockedCount);
-    }
-
-    std::vector<Candidate> validCandidates;
-    validCandidates.reserve(params_.advSamples * params_.rotSamples + 1);
-
-    const float advStep = (params_.advSamples > 1)
-                              ? (params_.maxAdvSpeed - params_.minAdvSpeed) / (params_.advSamples - 1)
-                              : 0.0f;
-    const float rotStep = (params_.rotSamples > 1)
-                              ? (2.0f * params_.maxRotSpeed) / (params_.rotSamples - 1)
-                              : 0.0f;
-
-    // Generar candidatos de la rejilla
-    // Si estamos cerca de la persona y en espacio libre, limitar la velocidad máxima de avance
-    float maxAllowedAdv = params_.maxAdvSpeed;
-    if (!forwardBlocked)
-    {
-        if (personDist < 800.0)
-        {
-            maxAllowedAdv = 0.0f;
-        }
-        else if (personDist < params_.targetDistMm)
-        {
-            maxAllowedAdv = std::clamp(propAdv + 150.0f, 0.0f, params_.maxAdvSpeed * 0.6f);
+            forward_blocked = true;
+            break;
         }
     }
 
-    for (int i = 0; i < params_.advSamples; ++i)
+    std::vector<Candidate> valid_candidates;
+    valid_candidates.reserve(params_.adv_samples * params_.rot_samples + 1);
+
+    const float adv_step = (params_.adv_samples > 1)
+                               ? (params_.max_adv_speed - params_.min_adv_speed) / (params_.adv_samples - 1)
+                               : 0.0f;
+    const float rot_step = (params_.rot_samples > 1)
+                               ? (2.0f * params_.max_rot_speed) / (params_.rot_samples - 1)
+                               : 0.0f;
+
+    float max_allowed_adv = params_.max_adv_speed;
+    if (!forward_blocked)
     {
-        const float candAdv = params_.minAdvSpeed + i * advStep;
-        if (candAdv > maxAllowedAdv) continue;
-
-        // Para giros in-situ (adv == 0), el umbral es el radio físico del robot (285 mm).
-        // Para trayectorias con avance lineal (adv > 0), se incluye el margen de seguridad (320 mm).
-        const float currentThresh = (candAdv < 1.0f) ? params_.robotRadiusMm : collisionThreshold;
-        for (int j = 0; j < params_.rotSamples; ++j)
+        if (person_dist < 800.0)
         {
-            const float candRot = -params_.maxRotSpeed + j * rotStep;
+            max_allowed_adv = 0.0f;
+        }
+        else if (person_dist < params_.target_dist_mm)
+        {
+            max_allowed_adv = std::clamp(prop_adv + 150.0f, 0.0f, params_.max_adv_speed * 0.6f);
+        }
+    }
 
-            const auto arc = generateArc(candAdv, candRot, params_.simTimeSec, params_.simSteps);
-            const auto [collision, minObsDist] = evaluateObstacleClearance(arc, obstacles, currentThresh);
+    for (int i = 0; i < params_.adv_samples; ++i)
+    {
+        const float cand_adv = params_.min_adv_speed + i * adv_step;
+        if (cand_adv > max_allowed_adv) continue;
+
+        const float current_thresh = (cand_adv < 1.0f) ? params_.robot_radius_mm : collision_threshold;
+        for (int j = 0; j < params_.rot_samples; ++j)
+        {
+            const float cand_rot = -params_.max_rot_speed + j * rot_step;
+
+            const auto arc = GenerateArc(cand_adv, cand_rot, params_.sim_time_sec, params_.sim_steps);
+            const auto [collision, min_obs_dist] = EvaluateObstacleClearance(arc, obstacles, current_thresh);
 
             if (!collision)
             {
-                validCandidates.push_back({candAdv, candRot, 0.0f, minObsDist, arc});
+                valid_candidates.push_back({cand_adv, cand_rot, 0.0f, min_obs_dist, arc});
             }
         }
     }
 
-    // Incluir explícitamente el comando proporcional como candidato si no colisiona
+    // Add proportional command baseline candidate if collision-free
     {
-        const auto propArc = generateArc(propAdv, propRot, params_.simTimeSec, params_.simSteps);
-        const auto [propCollision, propMinDist] = evaluateObstacleClearance(propArc, obstacles, collisionThreshold);
-        if (!propCollision)
+        const auto prop_arc = GenerateArc(prop_adv, prop_rot, params_.sim_time_sec, params_.sim_steps);
+        const auto [prop_collision, prop_min_dist] = EvaluateObstacleClearance(prop_arc, obstacles, collision_threshold);
+        if (!prop_collision)
         {
-            validCandidates.push_back({propAdv, propRot, 0.0f, propMinDist, propArc});
+            valid_candidates.push_back({prop_adv, prop_rot, 0.0f, prop_min_dist, prop_arc});
         }
     }
 
-    // 5. Evaluación de la función de coste para cada candidato no colisionante
+    float best_cost = std::numeric_limits<float>::max();
+    Candidate best_candidate;
+    bool found_candidate = false;
 
-    float bestCost = std::numeric_limits<float>::max();
-    Candidate bestCandidate;
-    bool foundCandidate = false;
-
-    for (auto& cand : validCandidates)
+    for (auto& cand : valid_candidates)
     {
-        const auto [endX, endY, endTheta] = forwardModel(cand.adv, cand.rot, params_.simTimeSec);
+        const auto [end_x, end_y, end_theta] = ForwardModel(cand.adv, cand.rot, params_.sim_time_sec);
 
-        // Term 1: Distancia final del arco a la persona objetivo
-        const float dxToEnd = targetPersonX - static_cast<float>(endX);
-        const float dyToEnd = targetPersonY - static_cast<float>(endY);
-        const float distToEnd = std::sqrt(dxToEnd * dxToEnd + dyToEnd * dyToEnd);
+        const float dx_to_end = target_person_x - static_cast<float>(end_x);
+        const float dy_to_end = target_person_y - static_cast<float>(end_y);
+        const float dist_to_end = std::sqrt(dx_to_end * dx_to_end + dy_to_end * dy_to_end);
 
-        // Term 2: El final del arco está a 1m de la persona (|dist - 1000|)
-        const float costTargetDist = std::abs(distToEnd - params_.targetDistMm) / params_.targetDistMm;
+        const float cost_target_dist = std::abs(dist_to_end - params_.target_dist_mm) / params_.target_dist_mm;
 
-        // Term 3: El final del arco encara a la persona
-        // Dirección hacia la persona desde el extremo del arco (en coordenadas robot: ángulo desde +Y hacia -X)
-        const double bearingToPerson = std::atan2(-dxToEnd, dyToEnd);
-        const double headingDiff = std::abs(std::remainder(endTheta - bearingToPerson, 2.0 * M_PI));
-        const float costHeading = static_cast<float>(headingDiff / M_PI);
-        const bool nearObstacle = forwardBlocked || (cand.minObsDist < 700.0f);
-        const float weightHeadingEff = nearObstacle ? 0.3f : params_.weightHeading;
+        const double bearing_to_person = std::atan2(-dx_to_end, dy_to_end);
+        const double heading_diff = std::abs(std::remainder(end_theta - bearing_to_person, 2.0 * M_PI));
+        const float cost_heading = static_cast<float>(heading_diff / M_PI);
+        const bool near_obstacle = forward_blocked || (cand.min_obs_dist < 700.0f);
+        const float weight_heading_eff = near_obstacle ? 0.3f : params_.weight_heading;
 
-        // Term 4: Distancia a los obstáculos (maximizar holgura -> penalizar cercanía)
-        float costObstacle = 0.0f;
-        if (cand.minObsDist < params_.obstacleInfluenceDistMm)
+        float cost_obstacle = 0.0f;
+        if (cand.min_obs_dist < params_.obstacle_influence_dist_mm)
         {
-            costObstacle = (params_.obstacleInfluenceDistMm - cand.minObsDist) /
-                           (params_.obstacleInfluenceDistMm - collisionThreshold);
-            costObstacle = std::clamp(costObstacle, 0.0f, 2.0f);
+            cost_obstacle = (params_.obstacle_influence_dist_mm - cand.min_obs_dist) /
+                            (params_.obstacle_influence_dist_mm - collision_threshold);
+            cost_obstacle = std::clamp(cost_obstacle, 0.0f, 2.0f);
         }
 
-        // Term 5: Preferir movimientos rápidos hacia el objetivo sólo cuando estamos lejos o evadiendo
-        float costSpeed = 0.0f;
-        if (personDist > 1400.0f || nearObstacle)
+        float cost_speed = 0.0f;
+        if (person_dist > 1400.0f || near_obstacle)
         {
-            costSpeed = 1.0f - (cand.adv / params_.maxAdvSpeed);
+            cost_speed = 1.0f - (cand.adv / params_.max_adv_speed);
         }
 
-        // Term 6: Progreso general hacia la persona sólo cuando estamos lejos
-        float costDistToPerson = 0.0f;
-        if (personDist > 1600.0f)
+        float cost_dist_to_person = 0.0f;
+        if (person_dist > 1600.0f)
         {
-            costDistToPerson = distToEnd / 4000.0f;
+            cost_dist_to_person = dist_to_end / 4000.0f;
         }
 
-        // Term 7: Alineación suave con el controlador proporcional (desactivado cerca de obstáculos)
-        const float costProp = nearObstacle
-                                   ? 0.0f
-                                   : (0.5f * (std::abs(cand.adv - propAdv) / params_.maxAdvSpeed) +
-                                      0.5f * (std::abs(cand.rot - propRot) / (2.0f * params_.maxRotSpeed)));
+        const float cost_prop = near_obstacle
+                                    ? 0.0f
+                                    : (0.5f * (std::abs(cand.adv - prop_adv) / params_.max_adv_speed) +
+                                       0.5f * (std::abs(cand.rot - prop_rot) / (2.0f * params_.max_rot_speed)));
 
-        // Term 8: Histéresis de giro para prevenir oscilaciones rápidas izquierda/derecha
-        float costHysteresis = 0.0f;
-        if (std::abs(cand.rot) > 0.1f && std::abs(lastChosenRot_) > 0.1f)
+        float cost_hysteresis = 0.0f;
+        if (std::abs(cand.rot) > 0.1f && std::abs(last_chosen_rot_) > 0.1f)
         {
-            if (cand.rot * lastChosenRot_ < 0.0f)
+            if (cand.rot * last_chosen_rot_ < 0.0f)
             {
-                costHysteresis = 0.3f; // Penalizar cambios bruscos de sentido de giro
+                cost_hysteresis = 0.3f;
             }
         }
 
-        // Term 9: Cuando el frente directo está bloqueado, penalizar trayectorias que van recto o se detienen
-        float costCorridor = 0.0f;
-        if (forwardBlocked)
+        float cost_corridor = 0.0f;
+        if (forward_blocked)
         {
             if (std::abs(cand.rot) < 0.25f)
             {
-                costCorridor += 1.5f; // Penalizar avanzar recto hacia el obstáculo bloqueante
+                cost_corridor += 1.5f;
             }
             if (cand.adv < 100.0f)
             {
-                costCorridor += 0.8f; // Desincentivar detenerse cuando hay holgura para maniobrar
+                cost_corridor += 0.8f;
             }
         }
 
-        // Coste total ponderado
-        cand.cost = params_.weightTargetDist * costTargetDist +
-                    weightHeadingEff * costHeading +
-                    params_.weightObstacle * costObstacle +
-                    params_.weightSpeed * costSpeed +
-                    params_.weightDistToPerson * costDistToPerson +
-                    params_.weightPropAlignment * costProp +
-                    costHysteresis +
-                    costCorridor;
+        cand.cost = params_.weight_target_dist * cost_target_dist +
+                    weight_heading_eff * cost_heading +
+                    params_.weight_obstacle * cost_obstacle +
+                    params_.weight_speed * cost_speed +
+                    params_.weight_dist_to_person * cost_dist_to_person +
+                    params_.weight_prop_alignment * cost_prop +
+                    cost_hysteresis +
+                    cost_corridor;
 
-        if (cand.cost < bestCost)
+        if (cand.cost < best_cost)
         {
-            bestCost = cand.cost;
-            bestCandidate = cand;
-            foundCandidate = true;
+            best_cost = cand.cost;
+            best_candidate = cand;
+            found_candidate = true;
         }
     }
 
-    // 6. Asignación del comando resultante o fallback jerárquico de seguridad
-    if (foundCandidate)
+    if (found_candidate)
     {
-        if (bestCandidate.adv >= 100.0f)
-        {
-            lastPivotRot_ = 0.0f; // Reiniciar histéresis una vez que el robot avanza fluidamente
-        }
-        lastChosenRot_ = bestCandidate.rot;
-        out.advSpeed = bestCandidate.adv;
-        out.rotSpeed = bestCandidate.rot;
-        out.minObsDist = bestCandidate.minObsDist;
-        out.bestArc = bestCandidate.arc;
+        last_chosen_rot_ = best_candidate.rot;
+        out.adv_speed = best_candidate.adv;
+        out.rot_speed = best_candidate.rot;
+        out.min_obs_dist = best_candidate.min_obs_dist;
+        out.best_arc = best_candidate.arc;
 
-        // Indicar si DWA está maniobrando para evitar obstáculos
-        const bool diffFromProp = (std::abs(out.advSpeed - propAdv) > 100.0f ||
-                                   std::abs(out.rotSpeed - propRot) > 0.2f);
-        out.isAvoiding = (out.minObsDist < params_.obstacleInfluenceDistMm) && diffFromProp;
+        const bool diff_from_prop = (std::abs(out.adv_speed - prop_adv) > 100.0f ||
+                                    std::abs(out.rot_speed - prop_rot) > 0.2f);
+        out.is_avoiding = (out.min_obs_dist < params_.obstacle_influence_dist_mm) && diff_from_prop;
     }
     else
     {
-        // En caso de que todos los candidatos estén restringidos por cercanía:
-        // Prioridad de seguridad: velocidad lineal cero y rotar in-situ para encarar a la persona
-        out.advSpeed = 0.0f;
-        const double bearingToGoal = std::atan2(-targetPersonX, targetPersonY);
-        out.rotSpeed = (bearingToGoal >= 0.0) ? params_.maxRotSpeed : -params_.maxRotSpeed;
-        out.isAvoiding = true;
-        out.minObsDist = params_.robotRadiusMm;
-        out.bestArc = generateArc(0.0, out.rotSpeed, params_.simTimeSec, params_.simSteps);
+        out.adv_speed = 0.0f;
+        const double bearing_to_goal = std::atan2(-target_person_x, target_person_y);
+        out.rot_speed = (bearing_to_goal >= 0.0) ? params_.max_rot_speed : -params_.max_rot_speed;
+        out.is_avoiding = true;
+        out.min_obs_dist = params_.robot_radius_mm;
+        out.best_arc = GenerateArc(0.0, out.rot_speed, params_.sim_time_sec, params_.sim_steps);
     }
 
-    // Muestreo de arcos para visualización (tomar un subconjunto representativo)
-    for (size_t k = 0; k < validCandidates.size(); k += std::max<size_t>(1, validCandidates.size() / 15))
+    for (size_t k = 0; k < valid_candidates.size(); k += std::max<size_t>(1, valid_candidates.size() / 15))
     {
-        out.candidateArcs.push_back(validCandidates[k].arc);
+        out.candidate_arcs.push_back(valid_candidates[k].arc);
     }
 
     return out;
