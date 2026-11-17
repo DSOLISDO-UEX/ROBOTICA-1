@@ -26,26 +26,26 @@ public:
         float safetyMarginMm = 45.0f;       // Extra clearance margin (mm) -> collisionThreshold = 330mm
 
         // DWA Simulation Settings
-        float simTimeSec = 0.8f;            // Forward projection horizon (s)
-        int simSteps = 8;                   // Arc discretization steps along trajectory
-        int advSamples = 19;                // Discretization samples for advance speed (0..1000)
+        float simTimeSec = 1.1f;            // Forward projection horizon (s) - prolonged pelitos
+        int simSteps = 11;                  // Arc discretization steps along trajectory
+        int advSamples = 21;                // Discretization samples for advance speed (0..1000, 50mm/s resolution)
         int rotSamples = 25;                // Discretization samples for rotational speed (-1.2..1.2)
 
         // Proportional Controller Baseline
         float kpDist = 0.9f;                // Linear gain
-        float kpRot = 2.2f;                 // Angular steering gain
+        float kpRot = 1.2f;                 // Angular steering gain
         float kdVel = 0.85f;                // Radial velocity feedforward gain
 
         // Cost Function Weights
-        float weightTargetDist = 1.0f;      // Term: end of arc at 1m from person
-        float weightHeading = 0.5f;         // Term: end of arc faces the person (moderate to allow dodging)
+        float weightTargetDist = 2.5f;      // Term: end of arc at 1m from person (primary goal)
+        float weightHeading = 0.8f;         // Term: end of arc faces the person (moderate to allow dodging)
         float weightObstacle = 1.8f;        // Term: distance to obstacles (avoidance priority)
-        float weightSpeed = 1.2f;           // Term: prefer fast movements
-        float weightDistToPerson = 0.8f;    // Term: close distance to person when far
-        float weightPropAlignment = 0.3f;   // Bias towards proportional controller (only in free space)
+        float weightSpeed = 0.8f;           // Term: prefer fast movements when far
+        float weightDistToPerson = 0.6f;    // Term: close distance to person when far
+        float weightPropAlignment = 0.8f;   // Bias towards proportional controller (only in free space)
 
         // Clearance thresholds
-        float obstacleInfluenceDistMm = 900.0f; // Range where obstacle creates repulsive cost
+        float obstacleInfluenceDistMm = 1100.0f; // Range where obstacle creates repulsive cost
         float personBodyRadiusMm = 450.0f;      // Radius around person centroid excluded from obstacles
         float minSelfChassisDistMm = 340.0f;    // Self-chassis filter threshold (wheelpods reach ~331mm)
     };

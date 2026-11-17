@@ -8,7 +8,7 @@ namespace ControlParams
 {
     float targetDistMm = 1000.0f;        // Distancia objetivo nominal (mm) [1 metro]
     float maxAdvSpeed = 1000.0f;         // Velocidad lineal máxima (mm/s)
-    float maxRotSpeed = 1.0f;            // Velocidad angular máxima (rad/s)
+    float maxRotSpeed = 1.2f;            // Velocidad angular máxima (rad/s)
     float coneHalfApertureRad = 0.45f;   // Semiapertura del cono de filtrado LiDAR (rad)
     double azimuthSign = 1.0;            // Signo de proyección acimutal cámara-LiDAR
     double azimuthOffset = -0.1;         // Offset acimutal cámara-LiDAR (rad)
@@ -69,9 +69,12 @@ void SpecificWorker::initialize()
     ctrlParams.minAdvSpeed = 0.0f;
     ctrlParams.robotRadiusMm = 285.0f;
     ctrlParams.safetyMarginMm = 45.0f;
-    ctrlParams.simTimeSec = 0.8f;
-    ctrlParams.simSteps = 8;
+    ctrlParams.simTimeSec = 1.1f;
+    ctrlParams.simSteps = 11;
     ctrlParams.minSelfChassisDistMm = 340.0f;
+    ctrlParams.obstacleInfluenceDistMm = 1100.0f;
+    ctrlParams.weightObstacle = 1.8f;
+    ctrlParams.weightPropAlignment = 0.8f;
     controller_.setParams(ctrlParams);
 }
 

@@ -177,6 +177,24 @@ Controller::Output Controller::update(double personAngle,
         std::vector<QPointF> arc;
     };
 
+    // 4. Detección de bloqueo frontal en el corredor hacia el objetivo
+    bool forwardBlocked = false;
+    float obsCentroidX = 0.0f;
+    int blockedCount = 0;
+    for (const auto& obs : obstacles)
+    {
+        if (obs.y() > 0.0f && obs.y() < std::min(1700.0f, static_cast<float>(personDist) + 200.0f) && std::abs(obs.x()) < 420.0f)
+        {
+            forwardBlocked = true;
+            obsCentroidX += obs.x();
+            blockedCount++;
+        }
+    }
+    if (blockedCount > 0)
+    {
+        obsCentroidX /= static_cast<float>(blockedCount);
+    }
+
     std::vector<Candidate> validCandidates;
     validCandidates.reserve(params_.advSamples * params_.rotSamples + 1);
 
@@ -188,9 +206,25 @@ Controller::Output Controller::update(double personAngle,
                               : 0.0f;
 
     // Generar candidatos de la rejilla
+    // Si estamos cerca de la persona y en espacio libre, limitar la velocidad máxima de avance
+    float maxAllowedAdv = params_.maxAdvSpeed;
+    if (!forwardBlocked)
+    {
+        if (personDist < 800.0)
+        {
+            maxAllowedAdv = 0.0f;
+        }
+        else if (personDist < params_.targetDistMm)
+        {
+            maxAllowedAdv = std::clamp(propAdv + 150.0f, 0.0f, params_.maxAdvSpeed * 0.6f);
+        }
+    }
+
     for (int i = 0; i < params_.advSamples; ++i)
     {
         const float candAdv = params_.minAdvSpeed + i * advStep;
+        if (candAdv > maxAllowedAdv) continue;
+
         // Para giros in-situ (adv == 0), el umbral es el radio físico del robot (285 mm).
         // Para trayectorias con avance lineal (adv > 0), se incluye el margen de seguridad (320 mm).
         const float currentThresh = (candAdv < 1.0f) ? params_.robotRadiusMm : collisionThreshold;
@@ -219,27 +253,6 @@ Controller::Output Controller::update(double personAngle,
     }
 
     // 5. Evaluación de la función de coste para cada candidato no colisionante
-    // Detectar si el corredor frontal inmediato está bloqueado por un obstáculo
-    // (Solo activo cuando el objetivo está en el cono frontal y hay un obstáculo delante)
-    bool forwardBlocked = false;
-    float obsCentroidX = 0.0f;
-    int blockedCount = 0;
-    if (alignmentFactor > 0.0f)
-    {
-        for (const auto& obs : obstacles)
-        {
-            if (obs.y() > 0.0f && obs.y() < 1600.0f && std::abs(obs.x()) < 420.0f)
-            {
-                forwardBlocked = true;
-                obsCentroidX += obs.x();
-                blockedCount++;
-            }
-        }
-        if (blockedCount > 0)
-        {
-            obsCentroidX /= static_cast<float>(blockedCount);
-        }
-    }
 
     float bestCost = std::numeric_limits<float>::max();
     Candidate bestCandidate;
@@ -262,7 +275,8 @@ Controller::Output Controller::update(double personAngle,
         const double bearingToPerson = std::atan2(-dxToEnd, dyToEnd);
         const double headingDiff = std::abs(std::remainder(endTheta - bearingToPerson, 2.0 * M_PI));
         const float costHeading = static_cast<float>(headingDiff / M_PI);
-        const float weightHeadingEff = forwardBlocked ? 0.2f : params_.weightHeading;
+        const bool nearObstacle = forwardBlocked || (cand.minObsDist < 700.0f);
+        const float weightHeadingEff = nearObstacle ? 0.3f : params_.weightHeading;
 
         // Term 4: Distancia a los obstáculos (maximizar holgura -> penalizar cercanía)
         float costObstacle = 0.0f;
@@ -273,14 +287,22 @@ Controller::Output Controller::update(double personAngle,
             costObstacle = std::clamp(costObstacle, 0.0f, 2.0f);
         }
 
-        // Term 5: Preferir movimientos rápidos hacia el objetivo
-        const float costSpeed = 1.0f - (cand.adv / params_.maxAdvSpeed);
+        // Term 5: Preferir movimientos rápidos hacia el objetivo sólo cuando estamos lejos o evadiendo
+        float costSpeed = 0.0f;
+        if (personDist > 1400.0f || nearObstacle)
+        {
+            costSpeed = 1.0f - (cand.adv / params_.maxAdvSpeed);
+        }
 
-        // Term 6: Progreso general hacia la persona
-        const float costDistToPerson = distToEnd / 4000.0f;
+        // Term 6: Progreso general hacia la persona sólo cuando estamos lejos
+        float costDistToPerson = 0.0f;
+        if (personDist > 1600.0f)
+        {
+            costDistToPerson = distToEnd / 4000.0f;
+        }
 
-        // Term 7: Alineación suave con el controlador proporcional (desactivado durante evasión frontal)
-        const float costProp = forwardBlocked
+        // Term 7: Alineación suave con el controlador proporcional (desactivado cerca de obstáculos)
+        const float costProp = nearObstacle
                                    ? 0.0f
                                    : (0.5f * (std::abs(cand.adv - propAdv) / params_.maxAdvSpeed) +
                                       0.5f * (std::abs(cand.rot - propRot) / (2.0f * params_.maxRotSpeed)));
@@ -291,25 +313,21 @@ Controller::Output Controller::update(double personAngle,
         {
             if (cand.rot * lastChosenRot_ < 0.0f)
             {
-                costHysteresis = 0.6f; // Penalizar cambios bruscos de sentido de giro
+                costHysteresis = 0.3f; // Penalizar cambios bruscos de sentido de giro
             }
         }
 
-        // Term 9: Prioridad de evasión jerárquica cuando el frente está bloqueado
+        // Term 9: Cuando el frente directo está bloqueado, penalizar trayectorias que van recto o se detienen
         float costCorridor = 0.0f;
         if (forwardBlocked)
         {
-            if (cand.adv < 50.0f || std::abs(cand.rot) < 0.6f)
+            if (std::abs(cand.rot) < 0.25f)
             {
-                costCorridor = 4.0f; // Penalizar detenerse o avanzar recto hacia el obstáculo
+                costCorridor += 1.5f; // Penalizar avanzar recto hacia el obstáculo bloqueante
             }
-            else if (obsCentroidX <= 0.0f && cand.rot < -0.5f)
+            if (cand.adv < 100.0f)
             {
-                costCorridor = -2.0f - 0.5f * std::abs(cand.rot); // Obstáculo a la izquierda -> esquivar por la derecha
-            }
-            else if (obsCentroidX > 0.0f && cand.rot > 0.5f)
-            {
-                costCorridor = -2.0f - 0.5f * std::abs(cand.rot); // Obstáculo a la derecha -> esquivar por la izquierda
+                costCorridor += 0.8f; // Desincentivar detenerse cuando hay holgura para maniobrar
             }
         }
 

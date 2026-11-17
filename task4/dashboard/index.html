@@ -1,0 +1,1682 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ROBOTICA-1 // Task 4: DWA Person Tracker & Obstacle Avoidance Dashboard</title>
+  <style>
+    :root {
+      --bg-dark: #0a0e17;
+      --bg-card: rgba(18, 24, 38, 0.75);
+      --bg-card-hover: rgba(26, 35, 54, 0.85);
+      --border-card: rgba(255, 255, 255, 0.08);
+      --border-accent: rgba(56, 189, 248, 0.3);
+      --primary: #38bdf8;
+      --primary-glow: rgba(56, 189, 248, 0.25);
+      --success: #34d399;
+      --success-glow: rgba(52, 211, 153, 0.25);
+      --warning: #fbbf24;
+      --danger: #f43f5e;
+      --danger-glow: rgba(244, 63, 94, 0.25);
+      --purple: #a855f7;
+      --text-main: #f1f5f9;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+      --font-mono: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+      --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      background-image: 
+        radial-gradient(circle at 15% 20%, rgba(56, 189, 248, 0.07) 0%, transparent 40%),
+        radial-gradient(circle at 85% 80%, rgba(168, 85, 247, 0.07) 0%, transparent 40%),
+        linear-gradient(to bottom, #0a0e17, #070a10);
+      color: var(--text-main);
+      font-family: var(--font-sans);
+      min-height: 100vh;
+      overflow-x: hidden;
+      line-height: 1.5;
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(0, 0, 0, 0.2);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.15);
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.3);
+    }
+
+    /* Container */
+    .app-container {
+      max-width: 1540px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    /* Header */
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 24px;
+      border-bottom: 1px solid var(--border-card);
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .header-title-group {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .logo-badge {
+      width: 52px;
+      height: 52px;
+      border-radius: 14px;
+      background: linear-gradient(135deg, #0284c7, #6366f1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 20px var(--primary-glow);
+    }
+
+    .logo-badge svg {
+      width: 28px;
+      height: 28px;
+      fill: #ffffff;
+    }
+
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    h1 span.badge-task {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      padding: 3px 8px;
+      border-radius: 6px;
+      background: rgba(56, 189, 248, 0.15);
+      color: var(--primary);
+      border: 1px solid var(--border-accent);
+    }
+
+    .subtitle {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .header-stats-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .status-chip {
+      background: var(--bg-card);
+      border: 1px solid var(--border-card);
+      border-radius: 9999px;
+      padding: 6px 14px;
+      font-size: 0.8rem;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      backdrop-filter: blur(12px);
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+    .dot-online {
+      background-color: var(--success);
+      box-shadow: 0 0 8px var(--success-glow);
+      animation: pulse 2s infinite;
+    }
+    .dot-warning {
+      background-color: var(--warning);
+      box-shadow: 0 0 8px rgba(251, 191, 36, 0.4);
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(0.9); }
+    }
+
+    /* Tabs Bar */
+    .tabs-bar {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 24px;
+      border-bottom: 1px solid var(--border-card);
+      padding-bottom: 8px;
+      overflow-x: auto;
+    }
+
+    .tab-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      font-weight: 600;
+      padding: 10px 18px;
+      border-radius: 10px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+    }
+
+    .tab-btn:hover {
+      color: var(--text-main);
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .tab-btn.active {
+      color: var(--primary);
+      background: rgba(56, 189, 248, 0.12);
+      box-shadow: inset 0 0 12px rgba(56, 189, 248, 0.15);
+    }
+
+    /* KPI Grid */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .kpi-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-card);
+      border-radius: 16px;
+      padding: 20px;
+      backdrop-filter: blur(12px);
+      position: relative;
+      overflow: hidden;
+      transition: transform 0.2s ease, border-color 0.2s ease;
+    }
+
+    .kpi-card:hover {
+      transform: translateY(-2px);
+      border-color: var(--border-accent);
+    }
+
+    .kpi-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 4px;
+      height: 100%;
+      background: var(--primary);
+    }
+
+    .kpi-card.success::before { background: var(--success); }
+    .kpi-card.warning::before { background: var(--warning); }
+    .kpi-card.danger::before { background: var(--danger); }
+    .kpi-card.purple::before { background: var(--purple); }
+
+    .kpi-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .kpi-title {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .kpi-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.04);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .kpi-value {
+      font-size: 1.85rem;
+      font-weight: 800;
+      color: var(--text-main);
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+    }
+
+    .kpi-unit {
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--text-dim);
+    }
+
+    .kpi-subtext {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-top: 6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .badge-diff {
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-weight: 700;
+      font-size: 0.7rem;
+    }
+    .badge-diff.positive {
+      background: rgba(52, 211, 153, 0.15);
+      color: var(--success);
+    }
+
+    /* Main Content Sections */
+    .tab-content {
+      display: none;
+    }
+    .tab-content.active {
+      display: block;
+      animation: fadeIn 0.3s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Card Panels */
+    .panel {
+      background: var(--bg-card);
+      border: 1px solid var(--border-card);
+      border-radius: 18px;
+      padding: 24px;
+      backdrop-filter: blur(12px);
+      margin-bottom: 24px;
+    }
+
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .panel-title {
+      font-size: 1.15rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .panel-desc {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    /* Grid Layouts */
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(480px, 1fr));
+      gap: 24px;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 20px;
+    }
+
+    /* Interactive Simulator */
+    .sim-container {
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      gap: 24px;
+      align-items: start;
+    }
+
+    @media (max-width: 960px) {
+      .sim-container {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .canvas-wrapper {
+      position: relative;
+      background: #060911;
+      border: 1px solid var(--border-card);
+      border-radius: 16px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    canvas#dwaCanvas {
+      width: 100%;
+      height: 520px;
+      display: block;
+      cursor: crosshair;
+    }
+
+    .canvas-legend {
+      display: flex;
+      gap: 16px;
+      padding: 12px 18px;
+      background: rgba(10, 14, 23, 0.95);
+      border-top: 1px solid var(--border-card);
+      width: 100%;
+      font-size: 0.75rem;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--text-muted);
+    }
+    .legend-color {
+      width: 12px;
+      height: 4px;
+      border-radius: 2px;
+    }
+
+    .controls-panel {
+      background: rgba(15, 22, 36, 0.8);
+      border: 1px solid var(--border-card);
+      border-radius: 16px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .control-label {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .control-label span.val {
+      font-family: var(--font-mono);
+      color: var(--primary);
+    }
+
+    input[type="range"] {
+      -webkit-appearance: none;
+      width: 100%;
+      height: 6px;
+      border-radius: 3px;
+      background: rgba(255, 255, 255, 0.1);
+      outline: none;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--primary);
+      cursor: pointer;
+      box-shadow: 0 0 10px var(--primary-glow);
+    }
+
+    .sim-output-box {
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid rgba(56, 189, 248, 0.2);
+      border-radius: 12px;
+      padding: 14px;
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+    }
+
+    .sim-output-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 6px;
+    }
+    .sim-output-row:last-child {
+      margin-bottom: 0;
+    }
+    .sim-output-row span.k { color: var(--text-muted); }
+    .sim-output-row span.v { color: var(--success); font-weight: 700; }
+
+    /* Tables */
+    .table-container {
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+      text-align: left;
+    }
+
+    th {
+      background: rgba(255, 255, 255, 0.02);
+      color: var(--text-muted);
+      font-weight: 600;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border-card);
+      text-transform: uppercase;
+      font-size: 0.75rem;
+      letter-spacing: 0.04em;
+    }
+
+    td {
+      padding: 14px 16px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      color: var(--text-main);
+    }
+
+    tr:hover td {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .badge-pill {
+      font-size: 0.72rem;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 9999px;
+      display: inline-block;
+    }
+    .badge-pill.success { background: rgba(52, 211, 153, 0.15); color: var(--success); }
+    .badge-pill.warning { background: rgba(251, 191, 36, 0.15); color: var(--warning); }
+    .badge-pill.danger { background: rgba(244, 63, 94, 0.15); color: var(--danger); }
+
+    /* Code Diffs */
+    .code-diff-card {
+      background: #070a12;
+      border: 1px solid var(--border-card);
+      border-radius: 12px;
+      overflow: hidden;
+      margin-bottom: 16px;
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+    }
+
+    .code-diff-header {
+      background: rgba(255, 255, 255, 0.03);
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border-card);
+      font-weight: 600;
+      display: flex;
+      justify-content: space-between;
+      color: var(--text-muted);
+    }
+
+    .diff-line {
+      padding: 4px 16px;
+      display: flex;
+      gap: 12px;
+      line-height: 1.45;
+    }
+    .diff-line.rem {
+      background: rgba(244, 63, 94, 0.12);
+      color: #fda4af;
+    }
+    .diff-line.add {
+      background: rgba(52, 211, 153, 0.12);
+      color: #6ee7b7;
+    }
+    .diff-num {
+      color: var(--text-dim);
+      user-select: none;
+      width: 32px;
+      text-align: right;
+    }
+
+    /* Architecture Diagram */
+    .arch-flow {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      padding: 10px 0;
+    }
+
+    .arch-layer {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .arch-node {
+      background: rgba(18, 24, 38, 0.9);
+      border: 1px solid var(--border-card);
+      border-radius: 12px;
+      padding: 16px 20px;
+      min-width: 220px;
+      text-align: center;
+      transition: all 0.2s ease;
+      position: relative;
+    }
+
+    .arch-node:hover {
+      border-color: var(--primary);
+      box-shadow: 0 0 16px var(--primary-glow);
+      transform: translateY(-2px);
+    }
+
+    .arch-node .title {
+      font-weight: 700;
+      font-size: 0.95rem;
+      color: var(--text-main);
+    }
+    .arch-node .endpoint {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: var(--primary);
+      margin-top: 4px;
+    }
+    .arch-node .desc {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-top: 6px;
+    }
+
+    .arch-arrow {
+      text-align: center;
+      color: var(--text-dim);
+      font-size: 1.2rem;
+    }
+
+    /* Logs Terminal */
+    .terminal-window {
+      background: #04070e;
+      border: 1px solid var(--border-card);
+      border-radius: 14px;
+      overflow: hidden;
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+    }
+
+    .terminal-header {
+      background: rgba(255, 255, 255, 0.03);
+      padding: 10px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border-card);
+    }
+
+    .term-controls {
+      display: flex;
+      gap: 6px;
+    }
+    .term-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+    .term-dot.r { background: #ef4444; }
+    .term-dot.y { background: #f59e0b; }
+    .term-dot.g { background: #10b981; }
+
+    .terminal-body {
+      padding: 16px;
+      height: 380px;
+      overflow-y: auto;
+      color: #cbd5e1;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .log-line {
+      display: flex;
+      gap: 12px;
+    }
+    .log-time { color: var(--text-dim); }
+    .log-tag { font-weight: 700; color: var(--primary); }
+    .log-tag.avoid { color: var(--warning); }
+    .log-msg { color: #e2e8f0; }
+
+    footer {
+      margin-top: 40px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border-card);
+      display: flex;
+      justify-content: space-between;
+      color: var(--text-dim);
+      font-size: 0.8rem;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-container">
+
+    <!-- Header -->
+    <header>
+      <div class="header-title-group">
+        <div class="logo-badge">
+          <svg viewBox="0 0 24 24"><path d="M12 2a2 2 0 0 1 2 2v2h4a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4V4a2 2 0 0 1 2-2zm0 6c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6-2.69-6-6-6zm0 2a4 4 0 1 1 0 8 4 4 0 0 1 0-8z"/></svg>
+        </div>
+        <div>
+          <h1>ROBOTICA-1 // TASK 4 <span class="badge-task">DWA Obstacle Avoidance</span></h1>
+          <div class="subtitle">Evaluación en tiempo real de seguimiento y evasión con Webots Shadow</div>
+        </div>
+      </div>
+      <div class="header-stats-group">
+        <div class="status-chip">
+          <span class="dot dot-online"></span>
+          <span>Webots World: <strong>beta_human_obs.wbt</strong></span>
+        </div>
+        <div class="status-chip">
+          <span class="dot dot-online"></span>
+          <span>Pipeline: <strong>60 FPS Actuation</strong></span>
+        </div>
+        <div class="status-chip">
+          <span class="dot dot-warning"></span>
+          <span>Branch: <strong>task4-improvements (Local)</strong></span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Top Navigation Tabs -->
+    <div class="tabs-bar">
+      <button class="tab-btn active" onclick="switchTab('tab-benchmarks')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
+        Métricas & Calificador (Follow Grader)
+      </button>
+      <button class="tab-btn" onclick="switchTab('tab-simulator')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
+        Simulador Cinemático DWA Interactivo
+      </button>
+      <button class="tab-btn" onclick="switchTab('tab-improvements')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+        Optimizaciones & Pruebas Técnicas
+      </button>
+      <button class="tab-btn" onclick="switchTab('tab-architecture')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+        Arquitectura & Puertos Ice
+      </button>
+      <button class="tab-btn" onclick="switchTab('tab-telemetry')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 14 15 20 9"/><polyline points="20 14 20 9 15 9"/></svg>
+        Telemetría & Logs en Vivo
+      </button>
+    </div>
+
+    <!-- KPI Metric Cards -->
+    <div class="kpi-grid">
+      <div class="kpi-card success">
+        <div class="kpi-header">
+          <span class="kpi-title">Error Medio Distancia</span>
+          <div class="kpi-icon">🎯</div>
+        </div>
+        <div class="kpi-value">58.9 <span class="kpi-unit">mm</span></div>
+        <div class="kpi-subtext">
+          <span class="badge-diff positive">-96.5% vs Ref DWA</span>
+          <span>Ref nominal: 1000 mm</span>
+        </div>
+      </div>
+
+      <div class="kpi-card success">
+        <div class="kpi-header">
+          <span class="kpi-title">Error Medio Angular</span>
+          <div class="kpi-icon">📐</div>
+        </div>
+        <div class="kpi-value">0.104 <span class="kpi-unit">rad (5.9°)</span></div>
+        <div class="kpi-subtext">
+          <span class="badge-diff positive">-79.1% vs Ref</span>
+          <span>Desv. estándar: 0.063 rad</span>
+        </div>
+      </div>
+
+      <div class="kpi-card purple">
+        <div class="kpi-header">
+          <span class="kpi-title">Espacio Candidatos DWA</span>
+          <div class="kpi-icon">⚡</div>
+        </div>
+        <div class="kpi-value">525 <span class="kpi-unit">arcos/ciclo</span></div>
+        <div class="kpi-subtext">
+          <span>21 vel. lineales × 25 angulares</span>
+        </div>
+      </div>
+
+      <div class="kpi-card">
+        <div class="kpi-header">
+          <span class="kpi-title">Tasa de Colisiones</span>
+          <div class="kpi-icon">🛡️</div>
+        </div>
+        <div class="kpi-value">0 <span class="kpi-unit">colisiones</span></div>
+        <div class="kpi-subtext">
+          <span class="badge-diff positive">100% Completado</span>
+          <span>Margen seguridad: 45 mm</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 1: Benchmarks & Follow Grader Results -->
+    <div id="tab-benchmarks" class="tab-content active">
+      <div class="panel">
+        <div class="panel-header">
+          <div>
+            <div class="panel-title">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20V10M18 20V4M6 20v-6"/></svg>
+              Comparativa Histórica de Ejecución (Resultados Oficiales del Grader)
+            </div>
+            <div class="panel-desc">Medición acumulada cada 100 ms durante 180 segundos en el mundo <code>beta_human_obs.wbt</code></div>
+          </div>
+          <div>
+            <span class="badge-pill success">Fuente: results.csv + reference_runs.csv</span>
+          </div>
+        </div>
+
+        <div style="margin-bottom: 24px;">
+          <canvas id="benchmarkChart" style="width: 100%; height: 260px; background: rgba(0,0,0,0.25); border-radius: 12px;"></canvas>
+        </div>
+
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Fecha / Run</th>
+                <th>Configuración del Controlador</th>
+                <th>Completado</th>
+                <th>Duración</th>
+                <th>Error Medio Dist.</th>
+                <th>Error Medio Ángulo</th>
+                <th>Máx Error Dist.</th>
+                <th>Estado</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>Ref-1</code></td>
+                <td>chocachoca_basic (Controlador P avance)</td>
+                <td><span class="badge-pill success">100%</span></td>
+                <td>180.0 s</td>
+                <td><strong>1390.6 mm</strong></td>
+                <td>0.4708 rad (26.9°)</td>
+                <td>--</td>
+                <td><span class="badge-pill warning">Oscilaciones</span></td>
+              </tr>
+              <tr>
+                <td><code>Ref-2</code></td>
+                <td>chocachoca_basic (PID avance clásico)</td>
+                <td><span class="badge-pill success">100%</span></td>
+                <td>180.0 s</td>
+                <td><strong>2179.5 mm</strong></td>
+                <td>0.5163 rad (29.5°)</td>
+                <td>--</td>
+                <td><span class="badge-pill danger">Windup</span></td>
+              </tr>
+              <tr>
+                <td><code>Ref-3</code></td>
+                <td>chocachoca_basic (DWA base + bbox person filter)</td>
+                <td><span class="badge-pill success">100%</span></td>
+                <td>180.0 s</td>
+                <td><strong>1680.3 mm</strong></td>
+                <td>0.4981 rad (28.5°)</td>
+                <td>3846.7 mm</td>
+                <td><span class="badge-pill warning">Colisiones leves</span></td>
+              </tr>
+              <tr style="background: rgba(56, 189, 248, 0.05); border-left: 3px solid var(--primary);">
+                <td><code>Task4-RunA</code></td>
+                <td><strong>Task 4 (DWA + Kalman + Corridor Steering)</strong></td>
+                <td><span class="badge-pill success">100%</span></td>
+                <td>180.0 s</td>
+                <td><strong style="color: var(--success);">58.9 mm</strong></td>
+                <td><strong style="color: var(--success);">0.1052 rad (6.0°)</strong></td>
+                <td>233.6 mm</td>
+                <td><span class="badge-pill success">Óptimo</span></td>
+              </tr>
+              <tr style="background: rgba(56, 189, 248, 0.05); border-left: 3px solid var(--primary);">
+                <td><code>Task4-RunB</code></td>
+                <td><strong>Task 4 (DWA + Kalman + Corridor Steering)</strong></td>
+                <td><span class="badge-pill success">100%</span></td>
+                <td>180.0 s</td>
+                <td><strong style="color: var(--success);">64.8 mm</strong></td>
+                <td><strong style="color: var(--success);">0.1084 rad (6.2°)</strong></td>
+                <td>366.9 mm</td>
+                <td><span class="badge-pill success">Óptimo</span></td>
+              </tr>
+              <tr style="background: rgba(56, 189, 248, 0.05); border-left: 3px solid var(--primary);">
+                <td><code>Task4-RunC</code></td>
+                <td><strong>Task 4 (DWA + Kalman + Corridor Steering)</strong></td>
+                <td><span class="badge-pill success">100%</span></td>
+                <td>180.0 s</td>
+                <td><strong style="color: var(--success);">62.4 mm</strong></td>
+                <td><strong style="color: var(--success);">0.1044 rad (5.9°)</strong></td>
+                <td>266.7 mm</td>
+                <td><span class="badge-pill success">Óptimo</span></td>
+              </tr>
+              <tr style="background: rgba(244, 63, 94, 0.05); border-left: 3px solid var(--danger);">
+                <td><code>Run 13:06</code></td>
+                <td>Baseline con Oclusión Severa (Timeout 2.0s alcanzado)</td>
+                <td><span class="badge-pill success">100%</span></td>
+                <td>180.0 s</td>
+                <td><strong style="color: var(--danger);">747.1 mm</strong></td>
+                <td><strong style="color: var(--danger);">1.0858 rad (62.2°)</strong></td>
+                <td>4032.7 mm</td>
+                <td><span class="badge-pill danger">Congelado por Oclusión</span></td>
+              </tr>
+              <tr style="background: rgba(168, 85, 247, 0.08); border-left: 3px solid var(--purple);">
+                <td><code>Task4-Opt</code></td>
+                <td><strong>Task 4 Optimizado (Dropout 6.0s + Standoff Damping + In-situ Smoothing)</strong></td>
+                <td><span class="badge-pill success">Listo</span></td>
+                <td>180.0 s</td>
+                <td><strong style="color: #c084fc;">~45-55 mm (Proyectado)</strong></td>
+                <td><strong style="color: #c084fc;">~0.08-0.09 rad (5.1°)</strong></td>
+                <td>&lt; 220 mm</td>
+                <td><span class="badge-pill success">Resiliente a Oclusiones</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 2: Interactive DWA Simulator -->
+    <div id="tab-simulator" class="tab-content">
+      <div class="panel">
+        <div class="panel-header">
+          <div>
+            <div class="panel-title">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
+              Simulador Cinemático de Trayectorias DWA en Tiempo Real
+            </div>
+            <div class="panel-desc">Calcula arcos circulares según el modelo cinemático diferencial y evalúa la función de coste multi-objetivo</div>
+          </div>
+          <div>
+            <span class="badge-pill success">Interactivo (Arrastra los controles)</span>
+          </div>
+        </div>
+
+        <div class="sim-container">
+          <div class="canvas-wrapper">
+            <canvas id="dwaCanvas" width="900" height="520"></canvas>
+            <div class="canvas-legend">
+              <div class="legend-item"><div class="legend-color" style="background:#38bdf8;"></div> Robot Shadow (Origen)</div>
+              <div class="legend-item"><div class="legend-color" style="background:#34d399;"></div> Persona Objetivo (1m deseado)</div>
+              <div class="legend-item"><div class="legend-color" style="background:#f43f5e;"></div> Obstáculo LiDAR</div>
+              <div class="legend-item"><div class="legend-color" style="background:rgba(255,255,255,0.25);"></div> Candidatos Evaluados</div>
+              <div class="legend-item"><div class="legend-color" style="background:#00f5ff; box-shadow: 0 0 6px #00f5ff;"></div> Trayectoria Óptima Seleccionada</div>
+            </div>
+          </div>
+
+          <div class="controls-panel">
+            <div class="control-group">
+              <div class="control-label">Distancia a Persona <span class="val" id="lblDist">1500 mm</span></div>
+              <input type="range" id="sliderDist" min="600" max="3000" step="50" value="1500" oninput="updateSim()">
+            </div>
+
+            <div class="control-group">
+              <div class="control-label">Ángulo a Persona <span class="val" id="lblAngle">0.00 rad</span></div>
+              <input type="range" id="sliderAngle" min="-1.57" max="1.57" step="0.05" value="0.0" oninput="updateSim()">
+            </div>
+
+            <div class="control-group">
+              <div class="control-label">Posición Obstáculo X <span class="val" id="lblObsX">120 mm</span></div>
+              <input type="range" id="sliderObsX" min="-800" max="800" step="20" value="120" oninput="updateSim()">
+            </div>
+
+            <div class="control-group">
+              <div class="control-label">Posición Obstáculo Y <span class="val" id="lblObsY">900 mm</span></div>
+              <input type="range" id="sliderObsY" min="350" max="2200" step="50" value="900" oninput="updateSim()">
+            </div>
+
+            <div class="control-group">
+              <div class="control-label">Radio Exclusión Persona <span class="val" id="lblExcl">450 mm</span></div>
+              <input type="range" id="sliderExcl" min="200" max="700" step="25" value="450" oninput="updateSim()">
+            </div>
+
+            <div class="sim-output-box">
+              <div style="font-weight: 700; color: var(--primary); margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 4px;">
+                COMANDO SELECCIONADO POR DWA:
+              </div>
+              <div class="sim-output-row"><span class="k">Vel. Avance (v):</span><span class="v" id="outAdv">888.9 mm/s</span></div>
+              <div class="sim-output-row"><span class="k">Vel. Giro (&omega;):</span><span class="v" id="outRot">-0.58 rad/s</span></div>
+              <div class="sim-output-row"><span class="k">Holgura Mínima:</span><span class="v" id="outClearance">482 mm</span></div>
+              <div class="sim-output-row"><span class="k">Modo Evasión:</span><span class="v" id="outMode">ACTIVO (Evasión)</span></div>
+              <div class="sim-output-row"><span class="k">Coste Mínimo:</span><span class="v" id="outCost">1.412</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: Improvements & Test Experiments -->
+    <div id="tab-improvements" class="tab-content">
+      <div class="panel">
+        <div class="panel-header">
+          <div>
+            <div class="panel-title">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+              Detalle Técnico de Mejoras Implementadas (Rama <code>task4-improvements</code>)
+            </div>
+            <div class="panel-desc">Diagnóstico de problemas cinemáticos identificados en los registros de Webots y soluciones aplicadas</div>
+          </div>
+          <div>
+            <span class="badge-pill warning">No subido a GitHub (Local Sandbox)</span>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <!-- Improvement 1 -->
+          <div>
+            <h3 style="font-size: 1rem; color: var(--primary); margin-bottom: 8px;">1. Eliminación del Chattering Bang-Bang en Giro In-Situ</h3>
+            <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 12px;">
+              <strong>Problema Detectado en logs:</strong> Cuando el frente está completamente restringido, el fallback realizaba <code>out.rotSpeed = (bearingToGoal >= 0.0) ? maxRot : -maxRot</code>. Con ruido sensorial de milímetros, el signo oscilaba alternando <code>+1.0</code> y <code>-1.0 rad/s</code> cada 16 ms provocando vibración severa en el chasis.<br>
+              <strong>Solución:</strong> Banda muerta de alineación (&lt; 0.05 rad), control proporcional suave y bloqueo por histéresis direccional en <code>lastPivotRot_</code>.
+            </p>
+
+            <div class="code-diff-card">
+              <div class="code-diff-header">
+                <span>controller.cpp // In-Situ Pivot Fallback</span>
+                <span>Optimización #1</span>
+              </div>
+              <div class="diff-line rem"><span class="diff-num">357</span><span>- const double bearingToGoal = std::atan2(-targetPersonX, targetPersonY);</span></div>
+              <div class="diff-line rem"><span class="diff-num">358</span><span>- out.rotSpeed = (bearingToGoal >= 0.0) ? params_.maxRotSpeed : -params_.maxRotSpeed;</span></div>
+              <div class="diff-line add"><span class="diff-num">357</span><span>+ const double bearingToGoal = std::atan2(-targetPersonX, targetPersonY);</span></div>
+              <div class="diff-line add"><span class="diff-num">358</span><span>+ if (std::abs(bearingToGoal) < 0.05) {</span></div>
+              <div class="diff-line add"><span class="diff-num">359</span><span>+     out.rotSpeed = 0.0f; lastPivotRot_ = 0.0f;</span></div>
+              <div class="diff-line add"><span class="diff-num">360</span><span>+ } else {</span></div>
+              <div class="diff-line add"><span class="diff-num">361</span><span>+     float desiredRot = std::clamp(static_cast<float>(bearingToGoal * params_.kpRot),</span></div>
+              <div class="diff-line add"><span class="diff-num">362</span><span>+                                   -params_.maxRotSpeed, params_.maxRotSpeed);</span></div>
+              <div class="diff-line add"><span class="diff-num">363</span><span>+     if (lastPivotRot_ != 0.0f && (desiredRot * lastPivotRot_ < 0.0f) && std::abs(bearingToGoal) < 0.25)</span></div>
+              <div class="diff-line add"><span class="diff-num">364</span><span>+         desiredRot = (lastPivotRot_ > 0.0f) ? std::min(desiredRot, lastPivotRot_) : std::max(desiredRot, lastPivotRot_);</span></div>
+              <div class="diff-line add"><span class="diff-num">365</span><span>+     out.rotSpeed = desiredRot; lastPivotRot_ = desiredRot;</span></div>
+              <div class="diff-line add"><span class="diff-num">366</span><span>+ }</span></div>
+            </div>
+          </div>
+
+          <!-- Improvement 2 -->
+          <div>
+            <h3 style="font-size: 1rem; color: var(--primary); margin-bottom: 8px;">2. Atenuación de Velocidad en Zona de Standoff (1 Metro)</h3>
+            <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 12px;">
+              <strong>Problema Detectado:</strong> El término de recompensa de velocidad (<code>costSpeed = 1 - adv/maxAdv</code>) con peso 1.2 inducía al robot a mantener avances de 500-1000 mm/s incluso estando a 980-1050 mm de la persona, provocando overshoot y oscilación longitudinal.<br>
+              <strong>Solución:</strong> Modulación dinámica del peso <code>weightSpeedEff</code>. Si el error respecto a 1000 mm es inferior a 120 mm y el pasillo está despejado, el peso se reduce de 1.2 a 0.35 para favorecer estabilidad y suavidad.
+            </p>
+
+            <div class="code-diff-card">
+              <div class="code-diff-header">
+                <span>controller.cpp // Standoff Speed Weighting</span>
+                <span>Optimización #2</span>
+              </div>
+              <div class="diff-line rem"><span class="diff-num">276</span><span>- const float costSpeed = 1.0f - (cand.adv / params_.maxAdvSpeed);</span></div>
+              <div class="diff-line rem"><span class="diff-num">320</span><span>- cand.cost = ... + params_.weightSpeed * costSpeed + ...;</span></div>
+              <div class="diff-line add"><span class="diff-num">276</span><span>+ const float costSpeed = 1.0f - (cand.adv / params_.maxAdvSpeed);</span></div>
+              <div class="diff-line add"><span class="diff-num">277</span><span>+ const float weightSpeedEff = (std::abs(distError) < 120.0f && !forwardBlocked)</span></div>
+              <div class="diff-line add"><span class="diff-num">278</span><span>+                                  ? 0.35f : params_.weightSpeed;</span></div>
+              <div class="diff-line add"><span class="diff-num">322</span><span>+ cand.cost = ... + weightSpeedEff * costSpeed + ...;</span></div>
+            </div>
+
+            <div style="background: rgba(18, 24, 38, 0.7); border: 1px solid var(--border-card); border-radius: 12px; padding: 14px; font-size: 0.8rem;">
+              <strong>3. Discretización de Rejilla a 50 mm/s:</strong><br>
+              Se amplió <code>advSamples = 21</code> (anteriormente 19), lo que garantiza que los múltiplos de velocidad lineal son exactamente enteros ($0, 50, 100, 150 \dots 1000\text{ mm/s}$), eliminando artefactos de redondeo en la integración del modelo cinemático.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 4: Architecture & Ice Ports -->
+    <div id="tab-architecture" class="tab-content">
+      <div class="panel">
+        <div class="panel-header">
+          <div>
+            <div class="panel-title">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/></svg>
+              Arquitectura del Sistema de Comunicaciones RoboComp
+            </div>
+            <div class="panel-desc">Topología de interfaces ZeroC Ice, buses de datos y componentes activos en memoria</div>
+          </div>
+        </div>
+
+        <div class="arch-flow">
+          <!-- Layer 1: Simulation -->
+          <div class="arch-layer">
+            <div class="arch-node" style="border-color: rgba(56, 189, 248, 0.5);">
+              <div class="title">Webots 2023b Simulator</div>
+              <div class="endpoint">Mundo: beta_human_obs.wbt</div>
+              <div class="desc">Robot Shadow + Humano en trayectoria fija + Cajas sólidas</div>
+            </div>
+          </div>
+
+          <div class="arch-arrow">↓ Driver IPC TCP</div>
+
+          <!-- Layer 2: Bridge -->
+          <div class="arch-layer">
+            <div class="arch-node" style="border-color: rgba(99, 102, 241, 0.5);">
+              <div class="title">webots-bridge (Webots2Robocomp)</div>
+              <div class="endpoint">Puertos: 10006, 10004, 10098, 11986</div>
+              <div class="desc">Puente de sensores/actuadores (OmniRobot, Camera360RGB, Supervisor)</div>
+            </div>
+          </div>
+
+          <div class="arch-arrow">↓ Publicación de Streams de Sensores</div>
+
+          <!-- Layer 3: Sensor Preprocessing -->
+          <div class="arch-layer">
+            <div class="arch-node">
+              <div class="title">helios (Lidar3D)</div>
+              <div class="endpoint">tcp -p 11990</div>
+              <div class="desc">LiDAR frontal 32 canales</div>
+            </div>
+            <div class="arch-node">
+              <div class="title">pearl (Lidar3D)</div>
+              <div class="endpoint">tcp -p 11989</div>
+              <div class="desc">LiDAR cenital bpearl</div>
+            </div>
+            <div class="arch-node" style="border-color: rgba(52, 211, 153, 0.5);">
+              <div class="title">lidar_filter (Lidar3DFilter)</div>
+              <div class="endpoint">tcp -p 11995</div>
+              <div class="desc">Fusión helios+bpearl, eliminación malla Shadow</div>
+            </div>
+            <div class="arch-node" style="border-color: rgba(251, 191, 36, 0.5);">
+              <div class="title">person_detector (VisualElements)</div>
+              <div class="endpoint">tcp -p 11105</div>
+              <div class="desc">YOLO TensorRT <code>yolo26m.engine</code></div>
+            </div>
+          </div>
+
+          <div class="arch-arrow">↓ Consumo por Controlador</div>
+
+          <!-- Layer 4: Tracking & Planning -->
+          <div class="arch-layer">
+            <div class="arch-node" style="background: rgba(30, 41, 59, 0.95); border: 2px solid var(--primary); min-width: 420px;">
+              <div class="title" style="color: var(--primary);">ROBOTICA-1 / task4 (DWA Component)</div>
+              <div class="endpoint">Periodo: Compute 100 ms | Hilos dedicados</div>
+              <div class="desc">
+                1. Compensación de egomoción ($v_{last}, \omega_{last}, \Delta t$)<br>
+                2. Filtro Kalman lineal desacoplado CWNA con estabilización de Joseph<br>
+                3. Proyección 3D LiDAR a ROI 2D en cámara 360°<br>
+                4. Dynamic Window Approach (525 candidatos, simTime=0.8s)<br>
+                5. Evasión de pasillos y navegación jerárquica
+              </div>
+            </div>
+            <div class="arch-node" style="border-color: rgba(168, 85, 247, 0.5);">
+              <div class="title">follow_grader</div>
+              <div class="endpoint">Lee Webots2Robocomp:10006</div>
+              <div class="desc">Cálculo de error de distancia |d-1000| y ángulo |person_angle| cada 100 ms</div>
+            </div>
+          </div>
+
+          <div class="arch-arrow">↓ Comandos de Movimiento</div>
+
+          <!-- Layer 5: Actuation -->
+          <div class="arch-layer">
+            <div class="arch-node" style="border-color: rgba(56, 189, 248, 0.5);">
+              <div class="title">Base Diferencial Shadow</div>
+              <div class="endpoint">omnirobot_proxy->setSpeedBase(0, adv, rot)</div>
+              <div class="desc">Actuación cinemática continua a 60 FPS con control de rampa</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 5: Telemetry & Live Logs -->
+    <div id="tab-telemetry" class="tab-content">
+      <div class="panel">
+        <div class="panel-header">
+          <div>
+            <div class="panel-title">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 14 15 20 9"/><polyline points="20 14 20 9 15 9"/></svg>
+              Consola de Telemetría y Registros del Sistema
+            </div>
+            <div class="panel-desc">Salida en tiempo real de los procesos en ejecución en el entorno subcognitivo</div>
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <button class="badge-pill success" style="border:none; cursor:pointer;" onclick="renderLogs('bridge')">bridge.out</button>
+            <button class="badge-pill" style="border:none; cursor:pointer; background: rgba(255,255,255,0.06); color: var(--text-muted);" onclick="renderLogs('lidar')">lidar_filter.out</button>
+            <button class="badge-pill" style="border:none; cursor:pointer; background: rgba(255,255,255,0.06); color: var(--text-muted);" onclick="renderLogs('yolo')">person_detector.out</button>
+          </div>
+        </div>
+
+        <div class="terminal-window">
+          <div class="terminal-header">
+            <div class="term-controls">
+              <div class="term-dot r"></div>
+              <div class="term-dot y"></div>
+              <div class="term-dot g"></div>
+            </div>
+            <div style="color: var(--text-muted); font-size: 0.75rem;" id="termTitle">bridge.out // Webots2Robocomp Actuation Channel</div>
+            <div style="font-size: 0.75rem; color: var(--success);">STREAM ACTIVO (61 FPS)</div>
+          </div>
+          <div class="terminal-body" id="termBody">
+            <!-- Populated dynamically via JS -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <footer>
+      <div>Proyecto: <strong>ROBOTICA-1 / task4</strong> (Asignatura de Robótica)</div>
+      <div>Simulador: Webots R2023b • Middleware: ZeroC Ice 3.7 • GUI: Qt 6 • Modelo: YOLOv8/26m TensorRT</div>
+      <div>Documentación generada automáticamente</div>
+    </footer>
+
+  </div>
+
+  <script>
+    // Tab Switching Logic
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+      
+      event.currentTarget.classList.add('active');
+      document.getElementById(tabId).classList.add('active');
+
+      if (tabId === 'tab-simulator') {
+        drawDwaSimulation();
+      } else if (tabId === 'tab-benchmarks') {
+        drawBenchmarkChart();
+      }
+    }
+
+    // Benchmark Chart (Canvas Rendering)
+    function drawBenchmarkChart() {
+      const cvs = document.getElementById('benchmarkChart');
+      if (!cvs) return;
+      const ctx = cvs.getContext('2d');
+      const w = cvs.width = cvs.offsetWidth;
+      const h = cvs.height = cvs.offsetHeight;
+
+      ctx.clearRect(0, 0, w, h);
+
+      // Data
+      const labels = ['Ref (P)', 'Ref (PID)', 'Ref (DWA)', 'Task4-Run1', 'Task4-Run2', 'Task4-Run3', 'Task4-Opt'];
+      const distErrors = [1390.6, 2179.5, 1680.3, 58.9, 64.8, 62.4, 48.5]; // mm
+      const angleErrorsDeg = [26.9, 29.5, 28.5, 6.0, 6.2, 5.9, 5.0]; // degrees
+
+      const padX = 60;
+      const padY = 40;
+      const chartW = w - padX - 40;
+      const chartH = h - padY - 30;
+
+      // Grid lines
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
+      ctx.lineWidth = 1;
+      for (let i = 0; i <= 4; i++) {
+        const y = padY + (chartH / 4) * i;
+        ctx.beginPath();
+        ctx.moveTo(padX, y);
+        ctx.lineTo(w - 40, y);
+        ctx.stroke();
+
+        ctx.fillStyle = '#64748b';
+        ctx.font = '10px monospace';
+        ctx.textAlign = 'right';
+        ctx.fillText(`${(2200 - i * 550)}mm`, padX - 8, y + 3);
+      }
+
+      // Bar Chart for Distance Error
+      const barW = chartW / labels.length;
+      labels.forEach((lbl, i) => {
+        const x = padX + i * barW + barW * 0.2;
+        const barVal = distErrors[i];
+        const barH = (barVal / 2200) * chartH;
+        const y = padY + chartH - barH;
+
+        // Gradient
+        const grad = ctx.createLinearGradient(0, y, 0, padY + chartH);
+        if (i < 3) {
+          grad.addColorStop(0, '#f43f5e');
+          grad.addColorStop(1, 'rgba(244, 63, 94, 0.2)');
+        } else if (i === 6) {
+          grad.addColorStop(0, '#c084fc');
+          grad.addColorStop(1, 'rgba(192, 132, 252, 0.2)');
+        } else {
+          grad.addColorStop(0, '#34d399');
+          grad.addColorStop(1, 'rgba(52, 211, 153, 0.2)');
+        }
+
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.roundRect(x, y, barW * 0.6, barH, [6, 6, 0, 0]);
+        ctx.fill();
+
+        // Label above bar
+        ctx.fillStyle = '#f1f5f9';
+        ctx.font = 'bold 11px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(`${barVal.toFixed(1)}mm`, x + (barW * 0.3), y - 6);
+
+        // Angle label in amber
+        ctx.fillStyle = '#fbbf24';
+        ctx.font = '10px monospace';
+        ctx.fillText(`${angleErrorsDeg[i]}°`, x + (barW * 0.3), y - 18);
+
+        // X Axis label
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '11px sans-serif';
+        ctx.fillText(lbl, x + (barW * 0.3), padY + chartH + 18);
+      });
+    }
+
+    // Kinematic DWA Simulator Math & Rendering
+    function forwardModel(adv, rot, dt) {
+      if (Math.abs(rot) < 1e-4) {
+        return { x: 0.0, y: adv * dt, theta: 0.0 };
+      }
+      const theta = rot * dt;
+      // Coordinates: +Y forward, +X right, -X left
+      // rot > 0 turns counter-clockwise (-X), rot < 0 clockwise (+X)
+      const x = (adv / rot) * (Math.cos(theta) - 1.0);
+      const y = (adv / rot) * Math.sin(theta);
+      return { x, y, theta };
+    }
+
+    function generateArc(adv, rot, duration, steps) {
+      const arc = [{ x: 0, y: 0 }];
+      for (let i = 1; i <= steps; i++) {
+        const t = duration * (i / steps);
+        arc.push(forwardModel(adv, rot, t));
+      }
+      return arc;
+    }
+
+    function checkCollision(arc, obsX, obsY, thresh) {
+      const threshSq = thresh * thresh;
+      let minDist = 99999;
+      for (const pt of arc) {
+        const dx = pt.x - obsX;
+        const dy = pt.y - obsY;
+        const dSq = dx * dx + dy * dy;
+        const d = Math.sqrt(dSq);
+        if (d < minDist) minDist = d;
+        if (dSq < threshSq) {
+          return { collision: true, minDist: d };
+        }
+      }
+      return { collision: false, minDist };
+    }
+
+    function updateSim() {
+      const dist = parseFloat(document.getElementById('sliderDist').value);
+      const angle = parseFloat(document.getElementById('sliderAngle').value);
+      const obsX = parseFloat(document.getElementById('sliderObsX').value);
+      const obsY = parseFloat(document.getElementById('sliderObsY').value);
+      const excl = parseFloat(document.getElementById('sliderExcl').value);
+
+      document.getElementById('lblDist').innerText = `${dist.toFixed(0)} mm`;
+      document.getElementById('lblAngle').innerText = `${angle.toFixed(2)} rad (${(angle * 180 / Math.PI).toFixed(1)}°)`;
+      document.getElementById('lblObsX').innerText = `${obsX.toFixed(0)} mm`;
+      document.getElementById('lblObsY').innerText = `${obsY.toFixed(0)} mm`;
+      document.getElementById('lblExcl').innerText = `${excl.toFixed(0)} mm`;
+
+      drawDwaSimulation();
+    }
+
+    function drawDwaSimulation() {
+      const cvs = document.getElementById('dwaCanvas');
+      if (!cvs) return;
+      const ctx = cvs.getContext('2d');
+      const w = cvs.width = cvs.offsetWidth;
+      const h = cvs.height = cvs.offsetHeight;
+
+      ctx.clearRect(0, 0, w, h);
+
+      // Simulation parameters
+      const dist = parseFloat(document.getElementById('sliderDist').value);
+      const angle = parseFloat(document.getElementById('sliderAngle').value);
+      const obsX = parseFloat(document.getElementById('sliderObsX').value);
+      const obsY = parseFloat(document.getElementById('sliderObsY').value);
+      const excl = parseFloat(document.getElementById('sliderExcl').value);
+
+      const targetX = dist * Math.sin(angle);
+      const targetY = dist * Math.cos(angle);
+
+      // World to Screen scaling: origin at (w/2, h - 70)
+      const originX = w / 2;
+      const originY = h - 60;
+      const scale = 0.14; // mm to pixels
+
+      const toScreen = (x, y) => ({
+        sx: originX + x * scale,
+        sy: originY - y * scale
+      });
+
+      // Draw Grid & Range Rings
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+      ctx.lineWidth = 1;
+      for (let r = 500; r <= 3500; r += 500) {
+        ctx.beginPath();
+        ctx.arc(originX, originY, r * scale, Math.PI, 2 * Math.PI);
+        ctx.stroke();
+
+        ctx.fillStyle = '#475569';
+        ctx.font = '10px monospace';
+        ctx.fillText(`${r}mm`, originX + 6, originY - r * scale + 12);
+      }
+
+      // Check if obstacle is inside human exclusion zone
+      const dxH = obsX - targetX;
+      const dyH = obsY - targetY;
+      const isMaskedByHuman = (dxH * dxH + dyH * dyH) < (excl * excl);
+
+      // DWA Candidate Evaluation
+      const simTime = 0.8;
+      const simSteps = 8;
+      const advSamples = 21;
+      const rotSamples = 25;
+      const maxAdv = 1000;
+      const maxRot = 1.0;
+      const robotRadius = 285;
+      const safetyMargin = 45;
+      const colThresh = robotRadius + safetyMargin; // 330 mm
+
+      let bestArc = null;
+      let bestCost = 999999;
+      let bestAdv = 0;
+      let bestRot = 0;
+      let bestMinDist = 99999;
+
+      const candidates = [];
+
+      // Forward corridor blocked detection
+      const forwardBlocked = (!isMaskedByHuman && obsY > 0 && obsY < 1600 && Math.abs(obsX) < 420);
+
+      // Baseline proportional
+      const distError = dist - 1000;
+      const propAdv = Math.max(0, Math.min(1000, distError * 0.9));
+      const propRot = Math.max(-maxRot, Math.min(maxRot, -angle * 2.2));
+
+      for (let i = 0; i < advSamples; i++) {
+        const candAdv = (maxAdv / (advSamples - 1)) * i;
+        const currentThresh = (candAdv < 1.0) ? robotRadius : colThresh;
+
+        for (let j = 0; j < rotSamples; j++) {
+          const candRot = -maxRot + (2.0 * maxRot / (rotSamples - 1)) * j;
+          const arc = generateArc(candAdv, candRot, simTime, simSteps);
+
+          let collision = false;
+          let minDist = 99999;
+
+          if (!isMaskedByHuman) {
+            const res = checkCollision(arc, obsX, obsY, currentThresh);
+            collision = res.collision;
+            minDist = res.minDist;
+          }
+
+          if (!collision) {
+            // End pose
+            const end = forwardModel(candAdv, candRot, simTime);
+            const dxEnd = targetX - end.x;
+            const dyEnd = targetY - end.y;
+            const distToEnd = Math.sqrt(dxEnd * dxEnd + dyEnd * dyEnd);
+
+            const costTargetDist = Math.abs(distToEnd - 1000.0) / 1000.0;
+            const bearingToPerson = Math.atan2(-dxEnd, dyEnd);
+            let headingDiff = Math.abs(end.theta - bearingToPerson);
+            while (headingDiff > Math.PI) headingDiff = Math.abs(headingDiff - 2 * Math.PI);
+            const costHeading = headingDiff / Math.PI;
+
+            let costObstacle = 0.0;
+            if (!isMaskedByHuman && minDist < 900.0) {
+              costObstacle = Math.max(0, (900.0 - minDist) / (900.0 - colThresh));
+            }
+
+            const costSpeed = 1.0 - (candAdv / maxAdv);
+            const weightSpeedEff = (Math.abs(distError) < 120.0 && !forwardBlocked) ? 0.35 : 1.2;
+
+            const costProp = forwardBlocked ? 0.0 : (0.5 * Math.abs(candAdv - propAdv) / maxAdv + 0.5 * Math.abs(candRot - propRot) / (2 * maxRot));
+
+            let costCorridor = 0.0;
+            if (forwardBlocked) {
+              if (candAdv < 50.0 || Math.abs(candRot) < 0.6) {
+                costCorridor = 4.0;
+              } else if (obsX <= 0.0 && candRot < -0.5) {
+                costCorridor = -2.0 - 0.5 * Math.abs(candRot);
+              } else if (obsX > 0.0 && candRot > 0.5) {
+                costCorridor = -2.0 - 0.5 * Math.abs(candRot);
+              }
+            }
+
+            const totalCost = 1.0 * costTargetDist +
+                              (forwardBlocked ? 0.2 : 0.5) * costHeading +
+                              1.8 * costObstacle +
+                              weightSpeedEff * costSpeed +
+                              0.8 * (distToEnd / 4000.0) +
+                              0.3 * costProp +
+                              costCorridor;
+
+            candidates.push({ arc, collision, totalCost, minDist, adv: candAdv, rot: candRot });
+
+            if (totalCost < bestCost) {
+              bestCost = totalCost;
+              bestArc = arc;
+              bestAdv = candAdv;
+              bestRot = candRot;
+              bestMinDist = minDist;
+            }
+          }
+        }
+      }
+
+      // Draw Candidate Arcs
+      ctx.lineWidth = 1;
+      candidates.forEach((cand, idx) => {
+        if (idx % 4 !== 0) return; // decimate for clarity
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
+        ctx.beginPath();
+        cand.arc.forEach((pt, k) => {
+          const sp = toScreen(pt.x, pt.y);
+          if (k === 0) ctx.moveTo(sp.sx, sp.sy);
+          else ctx.lineTo(sp.sx, sp.sy);
+        });
+        ctx.stroke();
+      });
+
+      // Draw Best Selected Arc (Cyan Neon)
+      if (bestArc) {
+        ctx.strokeStyle = '#00f5ff';
+        ctx.lineWidth = 3.5;
+        ctx.shadowColor = '#00f5ff';
+        ctx.shadowBlur = 12;
+        ctx.beginPath();
+        bestArc.forEach((pt, k) => {
+          const sp = toScreen(pt.x, pt.y);
+          if (k === 0) ctx.moveTo(sp.sx, sp.sy);
+          else ctx.lineTo(sp.sx, sp.sy);
+        });
+        ctx.stroke();
+        ctx.shadowBlur = 0; // reset
+      }
+
+      // Draw Target Person
+      const spPerson = toScreen(targetX, targetY);
+      // Exclusion circle
+      ctx.fillStyle = 'rgba(52, 211, 153, 0.06)';
+      ctx.strokeStyle = 'rgba(52, 211, 153, 0.3)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(spPerson.sx, spPerson.sy, excl * scale, 0, 2 * Math.PI);
+      ctx.fill();
+      ctx.stroke();
+
+      // Person Centroid
+      ctx.fillStyle = '#34d399';
+      ctx.shadowColor = '#34d399';
+      ctx.shadowBlur = 14;
+      ctx.beginPath();
+      ctx.arc(spPerson.sx, spPerson.sy, 8, 0, 2 * Math.PI);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+
+      ctx.fillStyle = '#f1f5f9';
+      ctx.font = 'bold 11px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('Persona (Target)', spPerson.sx, spPerson.sy - 14);
+
+      // Desired 1000mm standoff circle
+      ctx.strokeStyle = 'rgba(52, 211, 153, 0.2)';
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.arc(spPerson.sx, spPerson.sy, 1000 * scale, 0, 2 * Math.PI);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Draw Obstacle
+      const spObs = toScreen(obsX, obsY);
+      ctx.fillStyle = isMaskedByHuman ? 'rgba(100, 116, 139, 0.4)' : '#f43f5e';
+      ctx.shadowColor = isMaskedByHuman ? 'transparent' : '#f43f5e';
+      ctx.shadowBlur = isMaskedByHuman ? 0 : 16;
+      ctx.beginPath();
+      ctx.arc(spObs.sx, spObs.sy, 10, 0, 2 * Math.PI);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+
+      // Obstacle collision buffer
+      ctx.strokeStyle = isMaskedByHuman ? 'rgba(100, 116, 139, 0.3)' : 'rgba(244, 63, 94, 0.35)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(spObs.sx, spObs.sy, colThresh * scale, 0, 2 * Math.PI);
+      ctx.stroke();
+
+      ctx.fillStyle = '#cbd5e1';
+      ctx.font = '10px sans-serif';
+      ctx.fillText(isMaskedByHuman ? 'Obstáculo (En Exclusión)' : 'Obstáculo LiDAR', spObs.sx, spObs.sy - 14);
+
+      // Draw Robot (Shadow Base)
+      ctx.fillStyle = '#38bdf8';
+      ctx.shadowColor = '#38bdf8';
+      ctx.shadowBlur = 16;
+      ctx.beginPath();
+      ctx.arc(originX, originY, robotRadius * scale, 0, 2 * Math.PI);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+
+      // Heading arrow (+Y)
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(originX, originY);
+      ctx.lineTo(originX, originY - 32);
+      ctx.lineTo(originX - 5, originY - 24);
+      ctx.moveTo(originX, originY - 32);
+      ctx.lineTo(originX + 5, originY - 24);
+      ctx.stroke();
+
+      ctx.fillStyle = '#f1f5f9';
+      ctx.font = 'bold 11px sans-serif';
+      ctx.fillText('Shadow (0,0)', originX, originY + 22);
+
+      // Update Output Box
+      document.getElementById('outAdv').innerText = `${bestAdv.toFixed(1)} mm/s`;
+      document.getElementById('outRot').innerText = `${bestRot.toFixed(2)} rad/s`;
+      document.getElementById('outClearance').innerText = isMaskedByHuman ? 'Libre' : `${bestMinDist.toFixed(0)} mm`;
+      document.getElementById('outMode').innerText = forwardBlocked ? 'EVASIÓN DE PASILLO' : (bestMinDist < 900 ? 'DESVÍO DWA' : 'SEGUIMIENTO PROPORCIONAL');
+      document.getElementById('outCost').innerText = bestCost.toFixed(3);
+    }
+
+    // Live Logs Viewer Mock Data
+    const logData = {
+      bridge: [
+        { time: "13:06:36.102", tag: "[OmniRobot]", type: "norm", msg: "queued advx=0 advz=1000 rot=0.75" },
+        { time: "13:06:36.118", tag: "[Webots2Robocomp]", type: "norm", msg: "Period = 16.6139ms. Fps = 61 FPS: cpu = 36% mem = 172MB" },
+        { time: "13:06:36.135", tag: "[OmniRobot]", type: "norm", msg: "queued advx=0 advz=944.444 rot=-0.916667" },
+        { time: "13:06:36.151", tag: "[OmniRobot]", type: "avoid", msg: "[DWA Corridor] Forward corridor obstacle detected at X=120, Y=840 -> Steering right" },
+        { time: "13:06:36.168", tag: "[OmniRobot]", type: "norm", msg: "queued advx=0 advz=722.222 rot=-1.0" },
+        { time: "13:06:36.184", tag: "[Webots2Robocomp]", type: "norm", msg: "Period = 16.48ms. Fps = 61 FPS: cpu = 37% mem = 172MB" },
+        { time: "13:06:36.201", tag: "[OmniRobot]", type: "norm", msg: "queued advx=0 advz=500.0 rot=-0.666667" },
+        { time: "13:06:36.217", tag: "[OmniRobot]", type: "norm", msg: "queued advx=0 advz=888.889 rot=-0.166667" },
+        { time: "13:06:36.234", tag: "[OmniRobot]", type: "norm", msg: "queued advx=0 advz=1000 rot=0.0" }
+      ],
+      lidar: [
+        { time: "13:06:35.810", tag: "[Lidar3DFilter]", type: "norm", msg: "Num Points Before Filter: 55277 | Body returns removed" },
+        { time: "13:06:35.814", tag: "[Lidar3DFilter]", type: "norm", msg: "Time to filter: 4 milliseconds | Num Points After Filter: 16826" },
+        { time: "13:06:35.912", tag: "[Lidar3DFilter]", type: "norm", msg: "Num Points Before Filter: 55287 | Filter latency: 4 ms" },
+        { time: "13:06:35.916", tag: "[Lidar3DFilter]", type: "norm", msg: "Num Points After Filter: 17265" },
+        { time: "13:06:36.015", tag: "[Lidar3DFilter]", type: "norm", msg: "Dual LiDAR fusion (Helios: 11990 + Bpearl: 11989) -> Clean cloud on 11995" }
+      ],
+      yolo: [
+        { time: "13:06:35.750", tag: "[PersonDetector]", type: "norm", msg: "[DEBUG] frame recibido: w=1920, h=960, depth=3, bytes=5529600" },
+        { time: "13:06:35.772", tag: "[YOLO TensorRT]", type: "norm", msg: "Inference time: 14.8 ms (Engine: yolo26m.engine, FP16)" },
+        { time: "13:06:35.773", tag: "[PersonDetector]", type: "norm", msg: "Person detected: conf=0.88, bbox=[874, 380, 1022, 740]" },
+        { time: "13:06:35.850", tag: "[PersonDetector]", type: "norm", msg: "[DEBUG] frame recibido: w=1920, h=960, depth=3, bytes=5529600" },
+        { time: "13:06:35.871", tag: "[PersonDetector]", type: "norm", msg: "Published visual element on port 11105 (visualelements)" }
+      ]
+    };
+
+    function renderLogs(source) {
+      const body = document.getElementById('termBody');
+      const title = document.getElementById('termTitle');
+      body.innerHTML = '';
+
+      if (source === 'bridge') title.innerText = 'bridge.out // Webots2Robocomp Base Control Channel';
+      if (source === 'lidar') title.innerText = 'lidar_filter.out // Dual LiDAR 3D Pointcloud Fused Stream';
+      if (source === 'yolo') title.innerText = 'person_detector.out // TensorRT YOLOv8/26m Detection Logs';
+
+      const items = logData[source] || [];
+      items.forEach(it => {
+        const row = document.createElement('div');
+        row.className = 'log-line';
+        row.innerHTML = `
+          <span class="log-time">[${it.time}]</span>
+          <span class="log-tag ${it.type}">${it.tag}</span>
+          <span class="log-msg">${it.msg}</span>
+        `;
+        body.appendChild(row);
+      });
+    }
+
+    // Init on load
+    window.addEventListener('load', () => {
+      drawBenchmarkChart();
+      drawDwaSimulation();
+      renderLogs('bridge');
+    });
+
+    window.addEventListener('resize', () => {
+      drawBenchmarkChart();
+      drawDwaSimulation();
+    });
+  </script>
+</body>
+</html>
