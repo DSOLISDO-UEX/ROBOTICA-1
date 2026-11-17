@@ -33,9 +33,6 @@ SpecificWorker::SpecificWorker(const ConfigLoader& configLoader, TuplePrx tprx, 
     }
     else
     {
-#ifdef HIBERNATION_ENABLED
-        hibernationChecker.start(500);
-#endif
         statemachine.setChildMode(QState::ExclusiveStates);
         statemachine.start();
 
@@ -54,12 +51,11 @@ void SpecificWorker::initialize()
 {
     GenericWorker::initialize();
 
-    dimensions_ = QRectF(-6000, -3000, 12000, 6000);
-    viewer_ = new AbstractGraphicViewer(this->frame, dimensions_);
+    const QRectF dimensions(-6000, -3000, 12000, 6000);
+    viewer_ = new AbstractGraphicViewer(this->frame, dimensions);
     this->resize(900, 450);
     viewer_->show();
-    const auto rob = viewer_->add_robot(ControlParams::robotLengthMm, ControlParams::robotLengthMm, 0, 190, QColor("Blue"));
-    robotPolygon_ = std::get<0>(rob);
+    viewer_->add_robot(ControlParams::robotLengthMm, ControlParams::robotLengthMm, 0, 190, QColor("Blue"));
 
     // Configurar parámetros del controlador DWA
     Controller::Params ctrlParams;
@@ -198,12 +194,11 @@ void SpecificWorker::compute()
     }
 
     const auto [estAngle, estDist] = tracker_.GetPolarEstimate();
-    const double estDepth = estDist;
     const double radialVel = tracker_.GetRadialVelocity();
     const auto cartVel = tracker_.GetCartesianVelocity();
 
     // Actualizar controlador jerárquico DWA + Proporcional
-    const auto ctrlOutput = controller_.update(estAngle, estDepth, radialVel,
+    const auto ctrlOutput = controller_.update(estAngle, estDist, radialVel,
                                                cartVel.x(), cartVel.y(),
                                                lidarData.points);
 
@@ -214,7 +209,7 @@ void SpecificWorker::compute()
         lastLogTime = nowLog;
         std::cout << "[task4-DWA] det=" << visualObjects.objects.size()
                   << " meas=" << hasValidMeasurement
-                  << " estA=" << estAngle << " estD=" << estDepth
+                  << " estA=" << estAngle << " estD=" << estDist
                   << " adv=" << ctrlOutput.advSpeed << " rot=" << ctrlOutput.rotSpeed
                   << " obsDist=" << ctrlOutput.minObsDist
                   << " avoiding=" << ctrlOutput.isAvoiding << std::endl;
@@ -236,7 +231,7 @@ void SpecificWorker::compute()
     {
         auto* scene = &viewer_->scene;
         DrawLidar(lidarData.points, scene);
-        DrawPersonInLidar(static_cast<float>(estAngle), static_cast<float>(estDepth), scene);
+        DrawPersonInLidar(static_cast<float>(estAngle), static_cast<float>(estDist), scene);
         DrawDwaArcs(ctrlOutput, scene);
     }
 }

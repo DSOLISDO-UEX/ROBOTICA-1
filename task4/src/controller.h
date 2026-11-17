@@ -100,7 +100,6 @@ public:
 
 private:
     Params params_;
-    float lastPivotRot_ = 0.0f;  // Hysteresis to prevent left-right oscillation when blocked
     float lastChosenRot_ = 0.0f; // Turn continuity across consecutive DWA cycles
 
     // Extracts relevant 2D static obstacle points from LiDAR cloud

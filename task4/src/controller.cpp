@@ -179,20 +179,13 @@ Controller::Output Controller::update(double personAngle,
 
     // 4. Detección de bloqueo frontal en el corredor hacia el objetivo
     bool forwardBlocked = false;
-    float obsCentroidX = 0.0f;
-    int blockedCount = 0;
     for (const auto& obs : obstacles)
     {
         if (obs.y() > 0.0f && obs.y() < std::min(1700.0f, static_cast<float>(personDist) + 200.0f) && std::abs(obs.x()) < 420.0f)
         {
             forwardBlocked = true;
-            obsCentroidX += obs.x();
-            blockedCount++;
+            break;
         }
-    }
-    if (blockedCount > 0)
-    {
-        obsCentroidX /= static_cast<float>(blockedCount);
     }
 
     std::vector<Candidate> validCandidates;
@@ -352,10 +345,6 @@ Controller::Output Controller::update(double personAngle,
     // 6. Asignación del comando resultante o fallback jerárquico de seguridad
     if (foundCandidate)
     {
-        if (bestCandidate.adv >= 100.0f)
-        {
-            lastPivotRot_ = 0.0f; // Reiniciar histéresis una vez que el robot avanza fluidamente
-        }
         lastChosenRot_ = bestCandidate.rot;
         out.advSpeed = bestCandidate.adv;
         out.rotSpeed = bestCandidate.rot;

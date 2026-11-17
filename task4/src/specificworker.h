@@ -1,8 +1,6 @@
 #ifndef SPECIFICWORKER_H
 #define SPECIFICWORKER_H
 
-// #define HIBERNATION_ENABLED
-
 #ifdef emit
 #undef emit
 #endif
@@ -67,9 +65,7 @@ public slots:
 
 private:
     bool startupCheckFlag_ = false;
-    QRectF dimensions_;
     AbstractGraphicViewer* viewer_ = nullptr;
-    QGraphicsItem* robotPolygon_ = nullptr;
     PersonTracker tracker_;
     Controller controller_;
     double timeLastCycle_ = -1.0;
