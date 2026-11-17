@@ -19,11 +19,11 @@ public:
 
     /**
      * @brief Compensa el desplazamiento y rotación propios del robot en el estado estimado.
-     * @param advSpeed Velocidad lineal comandada (mm/s).
-     * @param rotSpeed Velocidad angular comandada (rad/s).
-     * @param dtEgo Intervalo de tiempo transcurrido (s).
+     * @param adv_speed Velocidad lineal comandada (mm/s).
+     * @param rot_speed Velocidad angular comandada (rad/s).
+     * @param dt_ego Intervalo de tiempo transcurrido (s).
      */
-    void EgoCompensate(double advSpeed, double rotSpeed, double dtEgo);
+    void EgoCompensate(double adv_speed, double rot_speed, double dt_ego);
 
     /**
      * @brief Ejecuta la etapa de predicción de velocidad constante del filtro de Kalman.
@@ -35,17 +35,17 @@ public:
      * @brief Actualiza el filtro con una nueva observación polar tras validar con puerta de Mahalanobis.
      * @param angle Ángulo medido hacia la persona (rad).
      * @param distance Distancia medida hacia la persona (mm).
-     * @param timeNow Marca de tiempo actual (s).
+     * @param time_now Marca de tiempo actual (s).
      */
-    void ProcessMeasurement(double angle, double distance, double timeNow);
+    void ProcessMeasurement(double angle, double distance, double time_now);
 
     /**
      * @brief Predice el estado en ausencia de medidas válidas hasta el límite temporal de caída.
-     * @param dtEgo Diferencial de tiempo del ciclo (s).
-     * @param timeNow Marca de tiempo actual (s).
+     * @param dt_ego Diferencial de tiempo del ciclo (s).
+     * @param time_now Marca de tiempo actual (s).
      * @return true si la predicción es válida, false si expiró el tiempo y se reinició el filtro.
      */
-    bool StepWithoutMeasurement(double dtEgo, double timeNow);
+    bool StepWithoutMeasurement(double dt_ego, double time_now);
 
     /**
      * @brief Obtiene la posición estimada actual en coordenadas polares.
@@ -78,9 +78,9 @@ public:
 private:
     Eigen::Vector4d state_ = Eigen::Vector4d::Zero();
     Eigen::Matrix4d covariance_ = Eigen::Matrix4d::Zero();
-    bool isInitialized_ = false;
-    double lastMeasTime_ = -1.0;
-    int consecutiveRejections_ = 0;
+    bool is_initialized_ = false;
+    double last_meas_time_ = -1.0;
+    int consecutive_rejections_ = 0;
 
     /**
      * @brief Proyecta la matriz de covarianza de ruido de observación polar al espacio cartesiano.
@@ -94,14 +94,14 @@ private:
      * @brief Inicializa el vector de estado y la matriz de covarianza a partir de una medida polar.
      * @param angle Ángulo inicial (rad).
      * @param distance Distancia inicial (mm).
-     * @param timeNow Marca de tiempo actual (s).
+     * @param time_now Marca de tiempo actual (s).
      */
-    void InitFromMeasurement(double angle, double distance, double timeNow);
+    void InitFromMeasurement(double angle, double distance, double time_now);
 
     /**
      * @brief Fuerza la simetría numérica de la matriz de covarianza P.
      */
-    void SymmetriseP();
+    void SymmetrizeP();
 };
 
 #endif // PERSON_TRACKER_H

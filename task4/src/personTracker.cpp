@@ -1,137 +1,137 @@
 #include "personTracker.h"
-#include <cmath>
-#include <algorithm>
 
-// Parámetros globales de sintonización del Filtro de Kalman
-namespace TrackerParams
+#include <algorithm>
+#include <cmath>
+
+namespace tracker_params
 {
-    double sigmaAngle = 0.05;               // Desviación estándar del ruido angular (rad)
-    double sigmaDistance = 150.0;           // Desviación estándar del ruido en distancia (mm)
-    double qIntensity = 500.0 * 500.0;      // Densidad espectral del ruido de aceleración (mm/s^2)^2
-    double mahalanobisGate = 9.21;          // Umbral chi-cuadrado (2 gl, 99%)
-    double maxDropoutTime = 2.0;            // Tiempo máximo sin medidas antes de reiniciar (s)
-    int maxConsecutiveRejections = 5;       // Rechazos consecutivos antes de forzar reinicio
+    constexpr double kSigmaAngle = 0.05;               // Angular measurement noise standard deviation (rad)
+    constexpr double kSigmaDistance = 150.0;           // Distance measurement noise standard deviation (mm)
+    constexpr double kQIntensity = 500.0 * 500.0;      // Continuous acceleration spectral density (mm/s^2)^2
+    constexpr double kMahalanobisGate = 9.21;          // Chi-square gating threshold (2 DOF, 99%)
+    constexpr double kMaxDropoutTime = 2.0;            // Maximum dropout time before tracker reset (s)
+    constexpr int kMaxConsecutiveRejections = 5;       // Maximum consecutive measurement rejections
 }
 
 void PersonTracker::Reset()
 {
-    isInitialized_ = false;
+    is_initialized_ = false;
     state_.setZero();
     covariance_.setZero();
-    lastMeasTime_ = -1.0;
-    consecutiveRejections_ = 0;
+    last_meas_time_ = -1.0;
+    consecutive_rejections_ = 0;
 }
 
-void PersonTracker::EgoCompensate(double advSpeed, double rotSpeed, double dtEgo)
+void PersonTracker::EgoCompensate(double adv_speed, double rot_speed, double dt_ego)
 {
-    if (!isInitialized_ || dtEgo <= 0.0) return;
+    if (!is_initialized_ || dt_ego <= 0.0) return;
 
-    // En RoboComp rotSpeed positivo gira el robot en sentido antihorario (+z); el mundo relativo rota en sentido horario (-phi)
-    const double phi = rotSpeed * dtEgo;
-    const double cosPhi = std::cos(phi);
-    const double sinPhi = std::sin(phi);
+    // Positive rot_speed rotates robot counter-clockwise (+Z); relative scene rotates clockwise (-phi)
+    const double phi = rot_speed * dt_ego;
+    const double cos_phi = std::cos(phi);
+    const double sin_phi = std::sin(phi);
 
-    Eigen::Matrix2d rotMatrix;
-    rotMatrix <<  cosPhi,  sinPhi,
-                 -sinPhi,  cosPhi;
+    Eigen::Matrix2d rot_matrix;
+    rot_matrix <<  cos_phi,  sin_phi,
+                  -sin_phi,  cos_phi;
 
-    const Eigen::Vector2d translation(0.0, advSpeed * dtEgo);
+    const Eigen::Vector2d translation(0.0, adv_speed * dt_ego);
 
-    state_.head<2>() = rotMatrix * (state_.head<2>() - translation);
-    state_.tail<2>() = rotMatrix * state_.tail<2>();
+    state_.head<2>() = rot_matrix * (state_.head<2>() - translation);
+    state_.tail<2>() = rot_matrix * state_.tail<2>();
 
     Eigen::Matrix4d transform = Eigen::Matrix4d::Zero();
-    transform.block<2, 2>(0, 0) = rotMatrix;
-    transform.block<2, 2>(2, 2) = rotMatrix;
+    transform.block<2, 2>(0, 0) = rot_matrix;
+    transform.block<2, 2>(2, 2) = rot_matrix;
 
     covariance_ = transform * covariance_ * transform.transpose();
-    SymmetriseP();
+    SymmetrizeP();
 }
 
 void PersonTracker::Predict(double dt)
 {
-    if (!isInitialized_ || dt <= 0.0) return;
+    if (!is_initialized_ || dt <= 0.0) return;
 
-    Eigen::Matrix4d transitionMatrix = Eigen::Matrix4d::Identity();
-    transitionMatrix(0, 2) = dt;
-    transitionMatrix(1, 3) = dt;
+    Eigen::Matrix4d transition_matrix = Eigen::Matrix4d::Identity();
+    transition_matrix(0, 2) = dt;
+    transition_matrix(1, 3) = dt;
 
     const double dt2 = dt * dt;
     const double dt3 = dt2 * dt;
 
-    const double q11 = TrackerParams::qIntensity * (dt3 / 3.0);
-    const double q12 = TrackerParams::qIntensity * (dt2 / 2.0);
-    const double q22 = TrackerParams::qIntensity * dt;
+    const double q11 = tracker_params::kQIntensity * (dt3 / 3.0);
+    const double q12 = tracker_params::kQIntensity * (dt2 / 2.0);
+    const double q22 = tracker_params::kQIntensity * dt;
 
-    // Modelo de ruido blanco de aceleración continua (CWNA) desacoplado en ejes X (0,2) e Y (1,3)
-    Eigen::Matrix4d processNoise = Eigen::Matrix4d::Zero();
-    processNoise(0, 0) = q11; processNoise(0, 2) = q12;
-    processNoise(2, 0) = q12; processNoise(2, 2) = q22;
-    processNoise(1, 1) = q11; processNoise(1, 3) = q12;
-    processNoise(3, 1) = q12; processNoise(3, 3) = q22;
+    // Continuous white noise acceleration (CWNA) model decoupled in X and Y axes
+    Eigen::Matrix4d process_noise = Eigen::Matrix4d::Zero();
+    process_noise(0, 0) = q11; process_noise(0, 2) = q12;
+    process_noise(2, 0) = q12; process_noise(2, 2) = q22;
+    process_noise(1, 1) = q11; process_noise(1, 3) = q12;
+    process_noise(3, 1) = q12; process_noise(3, 3) = q22;
 
-    state_ = transitionMatrix * state_;
-    covariance_ = transitionMatrix * covariance_ * transitionMatrix.transpose() + processNoise;
-    SymmetriseP();
+    state_ = transition_matrix * state_;
+    covariance_ = transition_matrix * covariance_ * transition_matrix.transpose() + process_noise;
+    SymmetrizeP();
 }
 
-void PersonTracker::ProcessMeasurement(double angle, double distance, double timeNow)
+void PersonTracker::ProcessMeasurement(double angle, double distance, double time_now)
 {
-    const double dtRaw = timeNow - lastMeasTime_;
+    const double dt_raw = time_now - last_meas_time_;
 
-    if (!isInitialized_ || dtRaw > TrackerParams::maxDropoutTime || dtRaw < 0.0)
+    if (!is_initialized_ || dt_raw > tracker_params::kMaxDropoutTime || dt_raw < 0.0)
     {
-        InitFromMeasurement(angle, distance, timeNow);
+        InitFromMeasurement(angle, distance, time_now);
         return;
     }
 
-    const double dt = std::clamp(dtRaw, 0.001, 0.5);
+    const double dt = std::clamp(dt_raw, 0.001, 0.5);
     Predict(dt);
 
     const Eigen::Vector2d measurement(distance * std::sin(angle), distance * std::cos(angle));
-    const Eigen::Matrix2d measNoise = ComputeR(angle, distance);
+    const Eigen::Matrix2d meas_noise = ComputeR(angle, distance);
 
-    Eigen::Matrix<double, 2, 4> obsMatrix = Eigen::Matrix<double, 2, 4>::Zero();
-    obsMatrix(0, 0) = 1.0;
-    obsMatrix(1, 1) = 1.0;
+    Eigen::Matrix<double, 2, 4> obs_matrix = Eigen::Matrix<double, 2, 4>::Zero();
+    obs_matrix(0, 0) = 1.0;
+    obs_matrix(1, 1) = 1.0;
 
-    const Eigen::Vector2d innovation = measurement - obsMatrix * state_;
-    const Eigen::Matrix2d innovationCov = obsMatrix * covariance_ * obsMatrix.transpose() + measNoise;
-    const Eigen::Matrix2d innovationCovInv = innovationCov.inverse();
+    const Eigen::Vector2d innovation = measurement - obs_matrix * state_;
+    const Eigen::Matrix2d innovation_cov = obs_matrix * covariance_ * obs_matrix.transpose() + meas_noise;
+    const Eigen::Matrix2d innovation_cov_inv = innovation_cov.inverse();
 
-    const double mahalanobisDist2 = innovation.transpose() * innovationCovInv * innovation;
-    if (mahalanobisDist2 > TrackerParams::mahalanobisGate)
+    const double mahalanobis_dist_sq = innovation.transpose() * innovation_cov_inv * innovation;
+    if (mahalanobis_dist_sq > tracker_params::kMahalanobisGate)
     {
-        consecutiveRejections_++;
-        if (consecutiveRejections_ >= TrackerParams::maxConsecutiveRejections)
+        consecutive_rejections_++;
+        if (consecutive_rejections_ >= tracker_params::kMaxConsecutiveRejections)
         {
-            InitFromMeasurement(angle, distance, timeNow);
+            InitFromMeasurement(angle, distance, time_now);
         }
         else
         {
-            lastMeasTime_ = timeNow;
+            last_meas_time_ = time_now;
         }
         return;
     }
 
-    consecutiveRejections_ = 0;
-    lastMeasTime_ = timeNow;
+    consecutive_rejections_ = 0;
+    last_meas_time_ = time_now;
 
-    const Eigen::Matrix<double, 4, 2> kalmanGain = covariance_ * obsMatrix.transpose() * innovationCovInv;
-    state_ = state_ + kalmanGain * innovation;
+    const Eigen::Matrix<double, 4, 2> kalman_gain = covariance_ * obs_matrix.transpose() * innovation_cov_inv;
+    state_ = state_ + kalman_gain * innovation;
 
-    // Forma de Joseph para garantizar estabilidad numérica y definición positiva de P
+    // Joseph form covariance update for numerical symmetry and positive definiteness
     const Eigen::Matrix4d identity = Eigen::Matrix4d::Identity();
-    const Eigen::Matrix4d ikh = identity - kalmanGain * obsMatrix;
-    covariance_ = ikh * covariance_ * ikh.transpose() + kalmanGain * measNoise * kalmanGain.transpose();
-    SymmetriseP();
+    const Eigen::Matrix4d ikh = identity - kalman_gain * obs_matrix;
+    covariance_ = ikh * covariance_ * ikh.transpose() + kalman_gain * meas_noise * kalman_gain.transpose();
+    SymmetrizeP();
 }
 
-bool PersonTracker::StepWithoutMeasurement(double dtEgo, double timeNow)
+bool PersonTracker::StepWithoutMeasurement(double dt_ego, double time_now)
 {
-    if (isInitialized_ && (timeNow - lastMeasTime_) <= TrackerParams::maxDropoutTime)
+    if (is_initialized_ && (time_now - last_meas_time_) <= tracker_params::kMaxDropoutTime)
     {
-        const double dt = std::clamp(dtEgo, 0.001, 0.5);
+        const double dt = std::clamp(dt_ego, 0.001, 0.5);
         Predict(dt);
         return true;
     }
@@ -148,31 +148,30 @@ std::tuple<double, double> PersonTracker::GetPolarEstimate() const
 
 double PersonTracker::GetRadialVelocity() const
 {
-    const auto [estAngle, estDist] = GetPolarEstimate();
-    if (estDist < 1e-3) return 0.0;
-    return state_(2) * std::sin(estAngle) + state_(3) * std::cos(estAngle);
+    const auto [est_angle, est_dist] = GetPolarEstimate();
+    if (est_dist < 1e-3) return 0.0;
+    return state_(2) * std::sin(est_angle) + state_(3) * std::cos(est_angle);
 }
 
 bool PersonTracker::IsInitialized() const
 {
-    return isInitialized_;
+    return is_initialized_;
 }
 
 Eigen::Matrix2d PersonTracker::ComputeR(double angle, double distance)
 {
-    // Jacobiano de la transformación polar a cartesiana: x = d*sin(a), y = d*cos(a)
     Eigen::Matrix2d jacobian;
     jacobian << std::sin(angle),  distance * std::cos(angle),
                 std::cos(angle), -distance * std::sin(angle);
 
-    Eigen::Matrix2d polarCov;
-    polarCov << TrackerParams::sigmaDistance * TrackerParams::sigmaDistance, 0.0,
-                0.0, TrackerParams::sigmaAngle * TrackerParams::sigmaAngle;
+    Eigen::Matrix2d polar_cov;
+    polar_cov << tracker_params::kSigmaDistance * tracker_params::kSigmaDistance, 0.0,
+                 0.0, tracker_params::kSigmaAngle * tracker_params::kSigmaAngle;
 
-    return jacobian * polarCov * jacobian.transpose();
+    return jacobian * polar_cov * jacobian.transpose();
 }
 
-void PersonTracker::InitFromMeasurement(double angle, double distance, double timeNow)
+void PersonTracker::InitFromMeasurement(double angle, double distance, double time_now)
 {
     state_ << distance * std::sin(angle), distance * std::cos(angle), 0.0, 0.0;
 
@@ -181,12 +180,12 @@ void PersonTracker::InitFromMeasurement(double angle, double distance, double ti
     covariance_(2, 2) = 1000.0 * 1000.0;
     covariance_(3, 3) = 1000.0 * 1000.0;
 
-    isInitialized_ = true;
-    lastMeasTime_ = timeNow;
-    consecutiveRejections_ = 0;
+    is_initialized_ = true;
+    last_meas_time_ = time_now;
+    consecutive_rejections_ = 0;
 }
 
-void PersonTracker::SymmetriseP()
+void PersonTracker::SymmetrizeP()
 {
     covariance_ = 0.5 * (covariance_ + covariance_.transpose());
 }

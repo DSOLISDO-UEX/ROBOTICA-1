@@ -25,11 +25,11 @@ class SpecificWorker : public GenericWorker
 public:
     /**
      * @brief Constructor de SpecificWorker.
-     * @param configLoader Cargador de configuración del componente.
+     * @param config_loader Cargador de configuración del componente.
      * @param tprx Tupla de proxies de comunicaciones de RoboComp.
-     * @param startupCheck Indica si se ejecuta en modo de comprobación inicial.
+     * @param startup_check Indica si se ejecuta en modo de comprobación inicial.
      */
-    SpecificWorker(const ConfigLoader& configLoader, TuplePrx tprx, bool startupCheck);
+    SpecificWorker(const ConfigLoader& config_loader, TuplePrx tprx, bool startup_check);
 
     /**
      * @brief Destructor de SpecificWorker.
@@ -64,13 +64,13 @@ public slots:
     int startup_check();
 
 private:
-    bool startupCheckFlag_ = false;
+    bool startup_check_flag_ = false;
     AbstractGraphicViewer* viewer_ = nullptr;
     PersonTracker tracker_;
     Controller controller_;
-    double timeLastCycle_ = -1.0;
-    float lastAdvCmd_ = 0.0f;
-    float lastRotCmd_ = 0.0f;
+    double time_last_cycle_ = -1.0;
+    float last_adv_cmd_ = 0.0f;
+    float last_rot_cmd_ = 0.0f;
 
     /**
      * @brief Detiene la base omnidireccional y pone a cero los registros de comandos previos.
@@ -80,36 +80,36 @@ private:
     /**
      * @brief Filtra los puntos 3D del LiDAR dentro de un sector angular y por encima de una distancia mínima.
      * @param points Nube de puntos de entrada.
-     * @param minAngle Ángulo mínimo del cono (rad).
-     * @param maxAngle Ángulo máximo del cono (rad).
-     * @param minDistance Distancia mínima 2D permitida (mm).
+     * @param min_angle Ángulo mínimo del cono (rad).
+     * @param max_angle Ángulo máximo del cono (rad).
+     * @param min_distance Distancia mínima 2D permitida (mm).
      * @return Puntos filtrados dentro del cono.
      */
-    RoboCompLidar3D::TPoints FilterCone(const RoboCompLidar3D::TPoints& points, float minAngle,
-                                        float maxAngle, float minDistance = 0.0f);
+    RoboCompLidar3D::TPoints FilterCone(const RoboCompLidar3D::TPoints& points, float min_angle,
+                                        float max_angle, float min_distance = 0.0f);
 
     /**
      * @brief Proyecta puntos LiDAR sobre la imagen equirectangular 360 y calcula la profundidad mínima en la ROI.
      */
     std::optional<std::tuple<std::vector<QPointF>, float>> ProjectLidarToCamera(
         const RoboCompLidar3D::TPoints& points,
-        const Eigen::Isometry3d& camTransform,
-        double personAngle,
+        const Eigen::Isometry3d& cam_transform,
+        double person_angle,
         const RoboCompCamera360RGB::TImage& image,
         const QRect& roi,
-        double azimuthSign,
-        double azimuthOffset);
+        double azimuth_sign,
+        double azimuth_offset);
 
     /**
      * @brief Renderiza la imagen 360 con la ROI, las guías de centrado y las proyecciones del LiDAR.
      */
     void DrawImage(const RoboCompCamera360RGB::TImage& raw, const QRect& roi,
-                   const std::vector<QPointF>& projectedPoints, QLabel* targetLabel);
+                   const std::vector<QPointF>& projected_points, QLabel* target_label);
 
     /**
      * @brief Dibuja la posición y datos estimados de la persona en la escena 2D del visor.
      */
-    void DrawPersonInLidar(float personAngle, float distance, QGraphicsScene* scene);
+    void DrawPersonInLidar(float person_angle, float distance, QGraphicsScene* scene);
 
     /**
      * @brief Dibuja los puntos de la nube LiDAR en la escena 2D del visor.
