@@ -23,7 +23,7 @@ public:
         float max_adv_speed = 1000.0f;        // Max advance speed (mm/s)
         float min_adv_speed = 0.0f;           // Min forward advance speed (mm/s)
         float max_rot_speed = 1.2f;           // Max rotational speed (rad/s)
-        float robot_radius_mm = 285.0f;       // Robot chassis half-width with wheelpods (284mm)
+        float robot_radius_mm = 300.0f;       // Robot chassis half-width with wheelpods (284mm)
         float safety_margin_mm = 45.0f;       // Extra clearance margin (mm) -> collision_threshold = 330mm
 
         // DWA Simulation Settings
@@ -40,14 +40,14 @@ public:
         // Cost Function Weights
         float weight_target_dist = 2.5f;      // Term: end of arc at 1m from person (primary goal)
         float weight_heading = 0.8f;          // Term: end of arc faces the person (allows dodging)
-        float weight_obstacle = 1.8f;         // Term: distance to obstacles (avoidance priority)
+        float weight_obstacle = 2.1f;         // Term: distance to obstacles (avoidance priority)
         float weight_speed = 0.8f;            // Term: prefer fast movements when far
         float weight_dist_to_person = 0.6f;   // Term: close distance to person when far
         float weight_prop_alignment = 0.8f;   // Bias towards proportional controller (only in free space)
 
         // Clearance thresholds
         float obstacle_influence_dist_mm = 1100.0f; // Range where obstacle creates repulsive cost
-        float person_body_radius_mm = 450.0f;       // Radius around person centroid excluded from obstacles
+        float person_body_radius_mm = 300.0f;       // Radius around person centroid excluded from obstacles
         float min_self_chassis_dist_mm = 340.0f;     // Self-chassis filter threshold (wheelpods reach ~331mm)
     };
 
