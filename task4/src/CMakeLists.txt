@@ -2,12 +2,14 @@
 LIST(APPEND SOURCES
   ../src/specificworker.cpp
   ../src/controller.cpp
+  ../src/personTracker.cpp
 )
 
 # Headers set
 LIST(APPEND HEADERS
   ../src/specificworker.h
   ../src/controller.h
+  ../src/personTracker.h
 )
 
 
